@@ -14,60 +14,105 @@ vLLM is the most popular open-source LLM serving engine, but it officially only 
 
 ## Quick Start
 
-**1. Clone vLLM and check out the base version**
+### Step 1: Download this repo
+
+Download the [latest release](https://github.com/rookiemann/vllm-windows-build/releases) and extract it, or clone:
 
 ```batch
+git clone https://github.com/rookiemann/vllm-windows-build.git
+```
+
+### Step 2: Clone vLLM source and apply the patch
+
+```batch
+cd vllm-windows-build
 git clone https://github.com/vllm-project/vllm.git vllm-source
 cd vllm-source
 git checkout v0.14.1
-```
-
-**2. Apply the patch**
-
-```batch
 git apply ..\vllm-windows.patch
 ```
 
-**3. Build**
+After this step your directory should look like:
 
-Open a Visual Studio Developer Command Prompt (or run `vcvars64.bat` first), then:
+```
+vllm-windows-build/
+├── vllm-source/          <-- patched vLLM source (you just created this)
+│   ├── csrc/
+│   ├── vllm/
+│   ├── setup.py
+│   └── ...
+├── vllm-windows.patch
+├── vllm_launcher.py
+├── build.bat
+└── ...
+```
+
+### Step 3: Create a Python environment with PyTorch
 
 ```batch
+python -m venv venv
+venv\Scripts\activate
+
+:: Install PyTorch with CUDA 12.6 support
+pip install torch==2.9.1 --index-url https://download.pytorch.org/whl/cu126
+
+:: Install other build dependencies
+pip install wheel setuptools cmake ninja packaging
+```
+
+### Step 4: Build vLLM
+
+Open a **Visual Studio Developer Command Prompt** (or run `vcvars64.bat` first so `cl.exe` and `nvcc.exe` are on PATH), then activate your venv and build:
+
+```batch
+venv\Scripts\activate
+
 set CUDA_HOME=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6
 set TORCH_CUDA_ARCH_LIST=8.6
 set VLLM_TARGET_DEVICE=cuda
 set MAX_JOBS=8
 
+cd vllm-source
 pip install -e . --no-build-isolation -v
 ```
 
-Or use the included build script:
+Or use the included build script (still needs the Developer Command Prompt and venv active):
 
 ```batch
+venv\Scripts\activate
 set CUDA_HOME=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6
 build.bat
 ```
 
-**4. Post-build: copy flash-attn wrappers**
+This compiles 370 CUDA/C++ files. Expect 30-45 minutes on a modern system with `MAX_JOBS=8`.
 
-The build places compiled `.pyd` files but not the Python interface code. The build script handles this automatically, but if you built manually:
+### Step 5: Post-build — copy flash-attn wrappers
+
+The build places compiled `.pyd` files in `vllm/vllm_flash_attn/` but not the Python interface code. `build.bat` handles this automatically, but if you built manually:
 
 ```batch
+cd vllm-source
 xcopy /E /Y ".deps\vllm-flash-attn-src\vllm_flash_attn\*.py" "vllm\vllm_flash_attn\"
 xcopy /E /Y ".deps\vllm-flash-attn-src\vllm_flash_attn\layers\*" "vllm\vllm_flash_attn\layers\"
 xcopy /E /Y ".deps\vllm-flash-attn-src\vllm_flash_attn\ops\*" "vllm\vllm_flash_attn\ops\"
 ```
 
-**5. Run**
+### Step 6: Run
 
 ```batch
 set VLLM_ATTENTION_BACKEND=FLASH_ATTN
 set VLLM_HOST_IP=127.0.0.1
 
-python vllm_launcher.py --model E:\models\Qwen2.5-1.5B-Instruct --port 8100
+cd ..
+python vllm_launcher.py --model E:\models\Qwen2.5-1.5B-Instruct --port 8100 --enforce-eager
 ```
 
-That's it. The server starts on `http://127.0.0.1:8100` with an OpenAI-compatible API.
+The server starts on `http://127.0.0.1:8100` with an OpenAI-compatible API. Test it:
+
+```batch
+curl http://127.0.0.1:8100/health
+:: Returns: {"status":"ok"}
+```
 
 ---
 
@@ -264,6 +309,8 @@ Change `TORCH_CUDA_ARCH_LIST` to match your GPU:
 
 ## Directory Structure
 
+**This repo (what you download):**
+
 ```
 vllm-windows-build/
 ├── vllm-windows.patch    # Complete git patch (apply to v0.14.1)
@@ -272,6 +319,25 @@ vllm-windows-build/
 ├── PATCHES.md            # Detailed per-file patch reference
 ├── LICENSE
 └── README.md
+```
+
+**After setup (what your working directory looks like):**
+
+```
+vllm-windows-build/
+├── vllm-source/          # Patched vLLM source (git clone + git apply)
+│   ├── csrc/             #   CUDA/C++ kernels (patched for MSVC)
+│   ├── vllm/             #   Python package (patched for Windows)
+│   ├── .deps/            #   Build dependencies (flash-attn source, etc.)
+│   ├── build/            #   CMake build output (generated)
+│   ├── setup.py          #   Patched build script
+│   └── ...
+├── venv/                 # Python virtual environment
+│   └── Scripts/python.exe
+├── vllm-windows.patch
+├── vllm_launcher.py      # <-- run this to start the server
+├── build.bat
+└── ...
 ```
 
 ---
