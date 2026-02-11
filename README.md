@@ -88,7 +88,7 @@ This compiles 370 CUDA/C++ files. Expect 30-45 minutes on a modern system with `
 
 ### Step 5: Post-build — copy flash-attn wrappers
 
-The build places compiled `.pyd` files in `vllm/vllm_flash_attn/` but not the Python interface code. `build.bat` handles this automatically, but if you built manually:
+The build downloads flash-attn source into `vllm-source/.deps/` and compiles the `.pyd` files, but doesn't copy the Python interface code. `build.bat` handles this automatically, but if you built manually:
 
 ```batch
 cd vllm-source
@@ -104,6 +104,7 @@ set VLLM_ATTENTION_BACKEND=FLASH_ATTN
 set VLLM_HOST_IP=127.0.0.1
 
 cd ..
+:: Replace with your own model path (HuggingFace format, not GGUF)
 python vllm_launcher.py --model E:\models\Qwen2.5-1.5B-Instruct --port 8100 --enforce-eager
 ```
 
