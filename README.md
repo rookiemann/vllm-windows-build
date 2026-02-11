@@ -108,7 +108,14 @@ cd ..
 python vllm_launcher.py --model E:\models\Qwen2.5-1.5B-Instruct --port 8100 --enforce-eager
 ```
 
-The server starts on `http://127.0.0.1:8100` with an OpenAI-compatible API. Test it:
+You'll see vLLM load the model (takes 30-60 seconds), then:
+
+```
+INFO:     Started server process
+INFO:     Uvicorn running on http://127.0.0.1:8100
+```
+
+Test it:
 
 ```batch
 curl http://127.0.0.1:8100/health
