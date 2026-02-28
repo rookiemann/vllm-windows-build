@@ -90,6 +90,10 @@ REQUIRES_DIST = [
     "depyf == 0.20.0",
     "setuptools >= 77.0.3, < 81.0.0",
     "pybase64",
+    "cbor2",
+    "openai-harmony >= 0.0.3",
+    "llguidance >= 1.3.0, < 1.4.0",
+    "xgrammar == 0.1.29",
 ]
 
 
