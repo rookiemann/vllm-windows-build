@@ -2,21 +2,84 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%2F11-blue)
-![vLLM: v0.14.1](https://img.shields.io/badge/vLLM-v0.14.1-orange)
+![vLLM: v0.14.2](https://img.shields.io/badge/vLLM-v0.14.2-orange)
 ![CUDA: 12.6](https://img.shields.io/badge/CUDA-12.6-76B900)
 ![Python: 3.10](https://img.shields.io/badge/Python-3.10-3776AB)
 
 **Native Windows build of vLLM — no WSL, no Docker, no Linux VM.** 26 patched files, 370/370 CUDA kernels compiled, tested and running on MSVC 2022 + CUDA 12.6.
 
-vLLM is the most popular open-source LLM serving engine, but it officially only supports Linux. This repo provides a complete patchset that gets vLLM v0.14.1 compiling and running natively on Windows with full CUDA acceleration.
+vLLM is the most popular open-source LLM serving engine, but it officially only supports Linux. This repo provides both a **pre-built binary** (just download and run) and a complete patchset for compiling vLLM v0.14.2 natively on Windows with full CUDA acceleration.
 
 ---
 
-## Quick Start
+## Quick Start — Pre-built Binary (Recommended)
 
-### Step 1: Download this repo
+No compiling needed. Downloads Python, PyTorch, and all dependencies automatically.
 
-Download the [latest release](https://github.com/rookiemann/vllm-windows-build/releases) and extract it, or clone:
+### 1. Download and extract
+
+Download **[vllm-0.14.2-win.zip](https://github.com/rookiemann/vllm-windows-build/releases/tag/v0.14.2-win)** from the Releases page and extract it anywhere.
+
+### 2. Launch
+
+Double-click **`launch.bat`** — or from a terminal:
+
+```batch
+launch.bat
+```
+
+On first run, `install.bat` will automatically:
+- Download Python 3.10.11 embedded (~15 MB)
+- Install pip
+- Install PyTorch 2.9.1+cu126 (~2.5 GB)
+- Install the pre-built vLLM wheel + all dependencies
+
+This takes 5-10 minutes on a fast connection. Subsequent launches skip straight to the server.
+
+### 3. Select a model
+
+If you run without `--model`, an interactive selector scans your system for HuggingFace models and GGUF files:
+
+```
+  vLLM Windows - Model Selection
+  ============================================================
+
+  Found 3 model(s):
+
+    #  Model                                     Type        Size  Path
+  ---  ----                                      ----        ----  ----
+  [ 1] Qwen2.5-1.5B-Instruct                    qwen2     3.1 GB  E:\models\...
+  [ 2] Llama-3.2-3B-Instruct                     llama     6.4 GB  E:\models\...
+  [ 3] phi-4-mini-instruct                       phi3      7.8 GB  E:\models\...
+
+  [ 0] Enter path manually
+
+  Select model number:
+```
+
+Or pass the model directly:
+
+```batch
+launch.bat --model E:\models\Qwen2.5-1.5B-Instruct --port 8100
+```
+
+### 4. Test it
+
+```batch
+curl http://127.0.0.1:8100/health
+:: Returns: {"status":"ok"}
+
+curl http://127.0.0.1:8100/v1/models
+:: Returns: {"object":"list","data":[{"id":"Qwen2.5-1.5B-Instruct",...}]}
+```
+
+---
+
+## Quick Start — Build from Source
+
+For developers who want to compile vLLM themselves (30-45 min build time).
+
+### Step 1: Clone this repo
 
 ```batch
 git clone https://github.com/rookiemann/vllm-windows-build.git
@@ -151,16 +214,21 @@ python vllm_launcher.py ^
 
 | Flag | Default | Description |
 |------|---------|------------|
-| `--model` | (required) | HuggingFace model path or ID |
+| `--model` | (interactive) | HuggingFace model path or ID. Omit for interactive selector |
+| `--models-dir` | (auto-scan) | Additional directory to scan for models |
 | `--port` | 8100 | Server port |
 | `--host` | 127.0.0.1 | Bind address |
 | `--gpu-memory-utilization` | 0.6 | Fraction of GPU VRAM to pre-allocate (0.1 - 1.0) |
 | `--max-model-len` | (auto) | Max sequence length |
 | `--max-num-seqs` | 64 | Max concurrent sequences in the KV cache |
-| `--enforce-eager` | off | Disable CUDA graphs (required on Windows — no Triton) |
+| `--enforce-eager` | off | Disable CUDA graphs (hurts throughput — only use for debugging) |
 | `--tensor-parallel-size` | 1 | Number of GPUs (must be 1 on Windows) |
-
-`--enforce-eager` is automatically added on Windows by the launcher's parent process, but include it if running the launcher directly.
+| `--gpu-id` | (all) | GPU device index (e.g. `1` for second GPU) |
+| `--enable-prefix-caching` | off | Reuse KV cache for shared prefixes |
+| `--num-scheduler-steps` | 1 | Multi-step scheduling (decode N tokens before CPU sync) |
+| `--max-num-batched-tokens` | (auto) | Max tokens per scheduler iteration |
+| `--task` | generate | `generate` for text, `embed` for embeddings |
+| `--trust-remote-code` | off | Allow custom model code (needed for some models) |
 
 ### API Endpoints
 
@@ -169,7 +237,8 @@ Once running, the server exposes:
 ```
 GET  /health                    # Returns {"status": "ok"}
 GET  /v1/models                 # List loaded models
-POST /v1/chat/completions       # OpenAI-compatible chat completions
+POST /v1/chat/completions       # OpenAI-compatible chat completions (with tool calling)
+POST /v1/embeddings             # Text embeddings (start with --task embed)
 ```
 
 ### Calling the API
@@ -317,19 +386,40 @@ Change `TORCH_CUDA_ARCH_LIST` to match your GPU:
 
 ## Directory Structure
 
-**This repo (what you download):**
+**Pre-built release (what you download from Releases):**
 
 ```
 vllm-windows-build/
-├── vllm-windows.patch    # Complete git patch (apply to v0.14.1)
-├── vllm_launcher.py      # OpenAI-compatible server wrapper for Windows
-├── build.bat             # Automated build script
+├── launch.bat            # One-click launcher (start here!)
+├── install.bat           # Auto-installs Python, PyTorch, vLLM
+├── vllm_launcher.py      # OpenAI-compatible server with model selector
+├── build_wheel.py        # Re-package vLLM into a wheel (advanced)
+├── dist/
+│   └── vllm-*.whl        # Pre-built vLLM wheel (380 MB)
+├── vllm-windows.patch    # Complete git patch (for building from source)
+├── build.bat             # Source build script
 ├── PATCHES.md            # Detailed per-file patch reference
 ├── LICENSE
 └── README.md
 ```
 
-**After setup (what your working directory looks like):**
+**After first launch (auto-created by install.bat):**
+
+```
+vllm-windows-build/
+├── python/               # Portable Python 3.10.11 (auto-downloaded)
+│   ├── python.exe
+│   ├── Scripts/pip.exe
+│   └── Lib/site-packages/
+├── launch.bat
+├── install.bat
+├── vllm_launcher.py
+├── dist/
+│   └── vllm-*.whl
+└── ...
+```
+
+**Build from source layout:**
 
 ```
 vllm-windows-build/

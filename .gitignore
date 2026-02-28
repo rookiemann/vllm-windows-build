@@ -2,3 +2,7 @@ vllm-source/
 *.log
 __pycache__/
 *.pyc
+python/
+dist/
+*.whl
+.vllm_config.json

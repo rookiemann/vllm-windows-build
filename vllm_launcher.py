@@ -7,6 +7,12 @@ which doesn't work on Windows (no fork, IPC sockets, etc.).
 This launcher creates a lightweight FastAPI server wrapping the
 synchronous LLM class (which uses InprocClient on Windows) and
 serves the OpenAI-compatible chat/completions endpoint with SSE streaming.
+
+Supports OpenAI function calling format: pass 'tools' in the request body
+and tool calls are returned in the standard tool_calls response format.
+Models with native tool calling templates (Qwen2.5, Llama 3.x, etc.)
+get tools injected via their chat template. Other models get tool
+descriptions injected into the system prompt with text-based parsing.
 """
 
 import sys
@@ -15,9 +21,11 @@ import os
 import asyncio
 import argparse
 import json
+import re
 import time
 import logging
 import uuid
+from pathlib import Path
 
 # Stub uvloop on Windows before any vLLM imports
 if sys.platform == "win32":
@@ -31,13 +39,174 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger("vllm_launcher")
 
 
-def create_app(llm: LLM, model_name: str):
+def parse_tool_calls(text: str):
+    """
+    Parse tool calls from LLM output text.
+
+    Supports multiple formats used by different models:
+    1. <tool_call>{"name": "...", "arguments": {...}}</tool_call>  (Qwen2.5, Hermes)
+    2. {"tool": "...", "arguments": {...}}  (generic JSON)
+    3. {"name": "...", "arguments": {...}}  (direct JSON)
+
+    Returns list of tool call dicts or None if no tool calls found.
+    """
+    tool_calls = []
+
+    # Format 1: <tool_call> tags (Qwen2.5, Hermes format)
+    tag_matches = re.findall(r'<tool_call>\s*(\{[\s\S]*?\})\s*</tool_call>', text)
+    for match in tag_matches:
+        try:
+            parsed = json.loads(match)
+            name = parsed.get("name") or parsed.get("function", {}).get("name")
+            args = parsed.get("arguments") or parsed.get("parameters") or parsed.get("function", {}).get("arguments", {})
+            if name:
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except json.JSONDecodeError:
+                        args = {}
+                tool_calls.append({"name": name, "arguments": args})
+        except json.JSONDecodeError:
+            continue
+
+    if tool_calls:
+        return tool_calls
+
+    # Format 2: Look for JSON objects with tool/name + arguments fields
+    # Find all JSON objects in the text
+    for pattern in [
+        r'\{[^{}]*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:',
+        r'\{[^{}]*"tool"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:',
+    ]:
+        match = re.search(pattern, text)
+        if match:
+            start = match.start()
+            # Find the complete JSON object by counting braces
+            depth = 0
+            end = start
+            for i in range(start, len(text)):
+                if text[i] == '{':
+                    depth += 1
+                elif text[i] == '}':
+                    depth -= 1
+                    if depth == 0:
+                        end = i + 1
+                        break
+            try:
+                parsed = json.loads(text[start:end])
+                name = parsed.get("name") or parsed.get("tool")
+                args = parsed.get("arguments") or parsed.get("params") or {}
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except json.JSONDecodeError:
+                        args = {}
+                if name:
+                    tool_calls.append({"name": name, "arguments": args})
+            except json.JSONDecodeError:
+                continue
+
+    return tool_calls if tool_calls else None
+
+
+def build_tool_system_prompt(tools: list) -> str:
+    """
+    Build a system prompt section describing available tools.
+    Used as fallback when the model's chat template doesn't support tools.
+    """
+    lines = [
+        "You have access to the following tools. To use a tool, respond with a JSON object:",
+        '{"name": "tool_name", "arguments": {"param": "value"}}',
+        "",
+        "Available tools:",
+    ]
+    for tool in tools:
+        func = tool.get("function", tool)
+        name = func.get("name", "unknown")
+        desc = func.get("description", "")
+        params = func.get("parameters", {})
+        props = params.get("properties", {})
+        required = params.get("required", [])
+
+        param_strs = []
+        for pname, pinfo in props.items():
+            req = " (required)" if pname in required else ""
+            param_strs.append(f"    - {pname}: {pinfo.get('type', 'string')}{req} - {pinfo.get('description', '')}")
+
+        lines.append(f"- {name}: {desc}")
+        if param_strs:
+            lines.extend(param_strs)
+    lines.append("")
+    lines.append("If you don't need a tool, respond with plain text.")
+
+    return "\n".join(lines)
+
+
+def format_tool_calls_response(tool_calls: list) -> list:
+    """Format parsed tool calls into OpenAI tool_calls response format."""
+    formatted = []
+    for i, tc in enumerate(tool_calls):
+        formatted.append({
+            "id": f"call_{uuid.uuid4().hex[:8]}",
+            "type": "function",
+            "function": {
+                "name": tc["name"],
+                "arguments": json.dumps(tc["arguments"]) if isinstance(tc["arguments"], dict) else tc["arguments"],
+            },
+        })
+    return formatted
+
+
+def create_app(llm: LLM, model_name: str, task: str = "generate"):
     """Create FastAPI app with OpenAI-compatible endpoints."""
     from fastapi import FastAPI, Request
     from fastapi.responses import StreamingResponse, JSONResponse
+    import threading
 
     app = FastAPI()
     engine = llm.llm_engine
+
+    # Pending non-streaming requests: rid -> {event, output}
+    pending_results: dict = {}
+    pending_lock = threading.Lock()
+
+    # Background engine step loop — processes ALL queued requests together
+    # This is what enables vLLM's continuous batching across concurrent requests
+    engine_running = True
+
+    async def engine_step_loop():
+        """Continuously step the engine to process batched requests."""
+        idle_count = 0
+        while engine_running:
+            try:
+                # Always step — step() is a no-op when nothing queued,
+                # but stepping eagerly keeps latency minimal for new arrivals
+                step_outputs = engine.step()
+                if step_outputs:
+                    idle_count = 0
+                    for output in step_outputs:
+                        rid = output.request_id
+                        if output.finished and rid in pending_results:
+                            with pending_lock:
+                                if rid in pending_results:
+                                    pending_results[rid]["output"] = output
+                                    pending_results[rid]["event"].set()
+                else:
+                    idle_count += 1
+            except Exception as e:
+                logger.error(f"Engine step error: {e}")
+                idle_count += 1
+            # Adaptive polling: 0.001s when busy, 0.003s when idle
+            await asyncio.sleep(0.001 if idle_count < 10 else 0.003)
+
+    @app.on_event("startup")
+    async def startup():
+        asyncio.create_task(engine_step_loop())
+
+    @app.on_event("shutdown")
+    async def shutdown():
+        nonlocal engine_running
+        engine_running = False
 
     @app.get("/health")
     async def health():
@@ -54,6 +223,51 @@ def create_app(llm: LLM, model_name: str):
             }]
         })
 
+    @app.post("/v1/embeddings")
+    async def embeddings(request: Request):
+        if task != "embed":
+            return JSONResponse(
+                {"error": "This server is running in 'generate' mode. Start with --task embed for embeddings."},
+                status_code=400,
+            )
+
+        body = await request.json()
+        input_texts = body.get("input", [])
+        if isinstance(input_texts, str):
+            input_texts = [input_texts]
+
+        request_id = f"embd-{uuid.uuid4().hex[:12]}"
+
+        try:
+            outputs = llm.embed(input_texts, use_tqdm=False)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+        data = []
+        total_tokens = 0
+        for i, output in enumerate(outputs):
+            embedding = output.outputs.embedding
+            if hasattr(embedding, 'tolist'):
+                embedding = embedding.tolist()
+            num_tokens = len(output.prompt_token_ids)
+            total_tokens += num_tokens
+            data.append({
+                "object": "embedding",
+                "index": i,
+                "embedding": embedding,
+            })
+
+        return JSONResponse({
+            "id": request_id,
+            "object": "list",
+            "model": model_name,
+            "data": data,
+            "usage": {
+                "prompt_tokens": total_tokens,
+                "total_tokens": total_tokens,
+            },
+        })
+
     @app.post("/v1/chat/completions")
     async def chat_completions(request: Request):
         body = await request.json()
@@ -68,26 +282,77 @@ def create_app(llm: LLM, model_name: str):
         repetition_penalty = body.get("repetition_penalty", 1.0)
         presence_penalty = body.get("presence_penalty", 0.0)
         frequency_penalty = body.get("frequency_penalty", 0.0)
+        tools = body.get("tools")
+        tool_choice = body.get("tool_choice", "auto")
 
         # Build prompt from messages using tokenizer's chat template
         tokenizer = llm.get_tokenizer()
-        try:
-            prompt = tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True
-            )
-        except Exception:
-            # Fallback: simple concatenation
-            parts = []
-            for m in messages:
-                role = m.get("role", "user")
-                content = m.get("content", "")
-                if isinstance(content, list):
-                    content = " ".join(
-                        p.get("text", "") for p in content if p.get("type") == "text"
+        has_native_tools = False
+
+        if tools:
+            # Strategy 1: Try native tools via chat template
+            native_ok = False
+            try:
+                prompt = tokenizer.apply_chat_template(
+                    messages, tools=tools, tokenize=False, add_generation_prompt=True
+                )
+                # Verify tools actually appeared in the prompt
+                # (some templates silently accept but ignore the tools kwarg)
+                tool_name = tools[0].get("function", tools[0]).get("name", "")
+                if tool_name and tool_name in prompt:
+                    native_ok = True
+                    has_native_tools = True
+            except (TypeError, Exception):
+                pass
+
+            # Strategy 2: Inject tool descriptions into the system prompt
+            if not native_ok:
+                has_native_tools = False
+                tool_prompt = build_tool_system_prompt(tools)
+                augmented_messages = list(messages)
+                if augmented_messages and augmented_messages[0].get("role") == "system":
+                    augmented_messages[0] = {
+                        **augmented_messages[0],
+                        "content": augmented_messages[0]["content"] + "\n\n" + tool_prompt,
+                    }
+                else:
+                    augmented_messages.insert(0, {"role": "system", "content": tool_prompt})
+
+                try:
+                    prompt = tokenizer.apply_chat_template(
+                        augmented_messages, tokenize=False, add_generation_prompt=True
                     )
-                parts.append(f"{role}: {content}")
-            parts.append("assistant:")
-            prompt = "\n".join(parts)
+                except Exception:
+                    # Final fallback: simple concatenation
+                    parts = []
+                    for m in augmented_messages:
+                        role = m.get("role", "user")
+                        content = m.get("content", "")
+                        if isinstance(content, list):
+                            content = " ".join(
+                                p.get("text", "") for p in content if p.get("type") == "text"
+                            )
+                        parts.append(f"{role}: {content}")
+                    parts.append("assistant:")
+                    prompt = "\n".join(parts)
+        else:
+            has_native_tools = False
+            try:
+                prompt = tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True
+                )
+            except Exception:
+                parts = []
+                for m in messages:
+                    role = m.get("role", "user")
+                    content = m.get("content", "")
+                    if isinstance(content, list):
+                        content = " ".join(
+                            p.get("text", "") for p in content if p.get("type") == "text"
+                        )
+                    parts.append(f"{role}: {content}")
+                parts.append("assistant:")
+                prompt = "\n".join(parts)
 
         params = SamplingParams(
             max_tokens=max_tokens,
@@ -103,23 +368,52 @@ def create_app(llm: LLM, model_name: str):
         request_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
 
         if not stream:
-            # Non-streaming: use LLM.generate()
-            outputs = llm.generate([prompt], params)
-            text = outputs[0].outputs[0].text
-            tokens = len(outputs[0].outputs[0].token_ids)
+            # Non-streaming: queue request and wait for engine to batch-process it
+            # This allows vLLM to batch multiple concurrent requests on the GPU
+            event = asyncio.Event()
+            with pending_lock:
+                pending_results[request_id] = {"event": event, "output": None}
+
+            engine.add_request(request_id, prompt, params)
+
+            # Wait for completion (the background step loop will set the event)
+            await event.wait()
+
+            with pending_lock:
+                result = pending_results.pop(request_id, None)
+
+            output = result["output"] if result else None
+            if not output:
+                return JSONResponse({"error": "Request failed"}, status_code=500)
+
+            text = output.outputs[0].text
+            tokens = len(output.outputs[0].token_ids)
+            prompt_tokens = len(output.prompt_token_ids)
+
+            # Check for tool calls in the response
+            message = {"role": "assistant", "content": text}
+            finish_reason = "stop"
+
+            if tools:
+                parsed_tools = parse_tool_calls(text)
+                if parsed_tools:
+                    message["tool_calls"] = format_tool_calls_response(parsed_tools)
+                    message["content"] = None
+                    finish_reason = "tool_calls"
+
             return JSONResponse({
                 "id": request_id,
                 "object": "chat.completion",
                 "model": model_name,
                 "choices": [{
                     "index": 0,
-                    "message": {"role": "assistant", "content": text},
-                    "finish_reason": "stop",
+                    "message": message,
+                    "finish_reason": finish_reason,
                 }],
                 "usage": {
                     "completion_tokens": tokens,
-                    "prompt_tokens": len(outputs[0].prompt_token_ids),
-                    "total_tokens": len(outputs[0].prompt_token_ids) + tokens,
+                    "prompt_tokens": prompt_tokens,
+                    "total_tokens": prompt_tokens + tokens,
                 },
             })
 
@@ -129,6 +423,7 @@ def create_app(llm: LLM, model_name: str):
             engine.add_request(rid, prompt, params)
 
             prev_len = 0
+            full_text = ""
             while True:
                 step_outputs = engine.step()
                 for output in step_outputs:
@@ -137,6 +432,7 @@ def create_app(llm: LLM, model_name: str):
                     text = output.outputs[0].text
                     new_text = text[prev_len:]
                     prev_len = len(text)
+                    full_text = text
 
                     if new_text:
                         chunk = {
@@ -181,17 +477,276 @@ def create_app(llm: LLM, model_name: str):
     return app
 
 
+# ---------------------------------------------------------------------------
+#  Interactive model discovery and selection
+# ---------------------------------------------------------------------------
+
+CONFIG_FILE = ".vllm_config.json"
+
+
+def _load_config() -> dict:
+    """Load saved config (last model selection, etc.)."""
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_config(cfg: dict):
+    """Save config to disk."""
+    try:
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(cfg, f, indent=2)
+    except OSError:
+        pass
+
+
+def _dir_size_gb(path: Path) -> float:
+    """Estimate directory size in GB."""
+    total = 0
+    try:
+        for f in path.rglob("*"):
+            if f.is_file():
+                total += f.stat().st_size
+    except OSError:
+        pass
+    return total / (1024 ** 3)
+
+
+def _file_size_gb(path: Path) -> float:
+    """Get file size in GB."""
+    try:
+        return path.stat().st_size / (1024 ** 3)
+    except OSError:
+        return 0.0
+
+
+def find_models(search_paths: list[str | Path] | None = None) -> list[dict]:
+    """
+    Scan directories for HuggingFace models and GGUF files.
+
+    Returns list of dicts: {path, name, model_type, size_gb, kind}
+    """
+    models = []
+    seen_paths: set[str] = set()
+
+    # Build search paths
+    dirs_to_scan: list[Path] = []
+
+    if search_paths:
+        for p in search_paths:
+            d = Path(p)
+            if d.is_dir():
+                dirs_to_scan.append(d)
+
+    # HuggingFace cache
+    hf_cache = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface")) / "hub"
+    if hf_cache.is_dir():
+        dirs_to_scan.append(hf_cache)
+
+    # Scan common locations on Windows drives
+    for drive in ["C:", "D:", "E:", "F:", "G:"]:
+        for subdir in ["models", "LLM", "llm", "huggingface"]:
+            candidate = Path(f"{drive}\\{subdir}")
+            if candidate.is_dir():
+                dirs_to_scan.append(candidate)
+
+    for scan_dir in dirs_to_scan:
+        try:
+            _scan_directory(scan_dir, models, seen_paths, max_depth=3)
+        except OSError:
+            continue
+
+    # Sort by name
+    models.sort(key=lambda m: m["name"].lower())
+    return models
+
+
+def _scan_directory(directory: Path, models: list, seen: set, max_depth: int, depth: int = 0):
+    """Recursively scan a directory for models."""
+    if depth > max_depth:
+        return
+
+    resolved = str(directory.resolve())
+    if resolved in seen:
+        return
+    seen.add(resolved)
+
+    try:
+        entries = list(directory.iterdir())
+    except OSError:
+        return
+
+    # Check if this directory itself is a HuggingFace model
+    config_json = directory / "config.json"
+    if config_json.is_file():
+        try:
+            with open(config_json, "r") as f:
+                config = json.load(f)
+            model_type = config.get("model_type", "unknown")
+            models.append({
+                "path": str(directory),
+                "name": directory.name,
+                "model_type": model_type,
+                "size_gb": round(_dir_size_gb(directory), 1),
+                "kind": "hf",
+            })
+            return  # Don't recurse into model directories
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Check for HF cache snapshot directories (models--org--name/snapshots/hash/)
+    if directory.name.startswith("models--"):
+        snapshots_dir = directory / "snapshots"
+        if snapshots_dir.is_dir():
+            try:
+                snapshot_dirs = sorted(snapshots_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
+                for snap in snapshot_dirs[:1]:  # Latest snapshot only
+                    if (snap / "config.json").is_file():
+                        _scan_directory(snap, models, seen, max_depth=0, depth=0)
+                        # Fix the name from the snapshot
+                        if models and models[-1]["path"] == str(snap):
+                            hf_name = directory.name.replace("models--", "").replace("--", "/")
+                            models[-1]["name"] = hf_name
+            except OSError:
+                pass
+            return
+
+    for entry in entries:
+        if not entry.is_dir() and entry.suffix.lower() == ".gguf":
+            entry_str = str(entry.resolve())
+            if entry_str not in seen:
+                seen.add(entry_str)
+                models.append({
+                    "path": str(entry),
+                    "name": entry.stem,
+                    "model_type": "gguf",
+                    "size_gb": round(_file_size_gb(entry), 1),
+                    "kind": "gguf",
+                })
+        elif entry.is_dir() and not entry.name.startswith("."):
+            _scan_directory(entry, models, seen, max_depth, depth + 1)
+
+
+def interactive_model_select(search_paths: list[str | Path] | None = None) -> str:
+    """
+    Display an interactive model selector and return the chosen model path.
+    """
+    config = _load_config()
+    last_model = config.get("last_model")
+
+    print("\n" + "=" * 60)
+    print("  vLLM Windows - Model Selection")
+    print("=" * 60)
+    print("\nScanning for models...")
+
+    models = find_models(search_paths)
+
+    if not models:
+        print("\nNo models found automatically.")
+        print("Enter the path to your model (HuggingFace directory or GGUF file):")
+        path = input("> ").strip().strip('"')
+        if not path:
+            print("No model specified. Exiting.")
+            sys.exit(1)
+        _save_config({"last_model": path})
+        return path
+
+    # Display table
+    print(f"\nFound {len(models)} model(s):\n")
+    # Find index of last model for default marker
+    default_idx = None
+    for i, m in enumerate(models):
+        if m["path"] == last_model:
+            default_idx = i
+            break
+
+    print(f"  {'#':>3}  {'Model':<40}  {'Type':<10}  {'Size':>7}  Path")
+    print(f"  {'---':>3}  {'----':<40}  {'----':<10}  {'----':>7}  ----")
+    for i, m in enumerate(models):
+        marker = " *" if i == default_idx else ""
+        size_str = f"{m['size_gb']:.1f} GB" if m['size_gb'] > 0 else "?"
+        name = m["name"][:40]
+        print(f"  [{i + 1:>2}] {name:<40}  {m['model_type']:<10}  {size_str:>7}  {m['path']}{marker}")
+
+    print(f"\n  [ 0] Enter path manually")
+    if default_idx is not None:
+        print(f"\n  * = last used (press Enter to reuse)")
+
+    # Get selection
+    while True:
+        prompt = "\nSelect model number"
+        if default_idx is not None:
+            prompt += f" [{default_idx + 1}]"
+        prompt += ": "
+
+        choice = input(prompt).strip()
+
+        if choice == "" and default_idx is not None:
+            selected = models[default_idx]["path"]
+            break
+
+        try:
+            num = int(choice)
+        except ValueError:
+            print("  Invalid input. Enter a number.")
+            continue
+
+        if num == 0:
+            print("Enter model path:")
+            selected = input("> ").strip().strip('"')
+            if not selected:
+                print("  No path entered.")
+                continue
+            break
+        elif 1 <= num <= len(models):
+            selected = models[num - 1]["path"]
+            break
+        else:
+            print(f"  Invalid choice. Enter 0-{len(models)}.")
+
+    _save_config({"last_model": selected})
+    print(f"\nSelected: {selected}\n")
+    return selected
+
+
 def main():
     parser = argparse.ArgumentParser(description="vLLM Windows Server")
-    parser.add_argument("--model", required=True, help="Model path or HF ID")
+    parser.add_argument("--model", default=None, help="Model path or HF ID (interactive selector if omitted)")
+    parser.add_argument("--models-dir", default=None,
+                        help="Additional directory to scan for models")
     parser.add_argument("--port", type=int, default=8100)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--max-model-len", type=int, default=None)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.6)
     parser.add_argument("--max-num-seqs", type=int, default=64)
-    parser.add_argument("--enforce-eager", action="store_true")
+    parser.add_argument("--enforce-eager", action="store_true",
+                        help="Disable CUDA graphs (hurts throughput — only use for debugging)")
     parser.add_argument("--tensor-parallel-size", type=int, default=1)
+    parser.add_argument("--gpu-id", type=int, default=None,
+                        help="GPU device index to use (e.g. 1 for second GPU)")
+    parser.add_argument("--enable-prefix-caching", action="store_true",
+                        help="Enable automatic prefix caching (reuses KV cache for shared prefixes)")
+    parser.add_argument("--num-scheduler-steps", type=int, default=1,
+                        help="Multi-step scheduling — decode N tokens before CPU sync (default: 1)")
+    parser.add_argument("--max-num-batched-tokens", type=int, default=None,
+                        help="Max tokens per scheduler iteration (higher = more prefill throughput)")
+    parser.add_argument("--task", default="generate", choices=["generate", "embed"],
+                        help="Task type: 'generate' for text generation, 'embed' for embeddings")
+    parser.add_argument("--trust-remote-code", action="store_true",
+                        help="Allow custom model code (needed for some embedding models like nomic-bert)")
     args = parser.parse_args()
+
+    # Interactive model selection if --model not provided
+    if args.model is None:
+        search_paths = [args.models_dir] if args.models_dir else None
+        args.model = interactive_model_select(search_paths)
+
+    # Pin to specific GPU if requested
+    if args.gpu_id is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
+        logger.info(f"Pinned to GPU {args.gpu_id}")
 
     logger.info(f"Loading model: {args.model}")
     start = time.time()
@@ -200,17 +755,27 @@ def main():
         "model": args.model,
         "gpu_memory_utilization": args.gpu_memory_utilization,
         "max_num_seqs": args.max_num_seqs,
-        "enforce_eager": args.enforce_eager,
     }
+    # Only force eager mode if explicitly requested (it disables CUDA graphs)
+    if args.enforce_eager:
+        llm_kwargs["enforce_eager"] = True
     if args.max_model_len:
         llm_kwargs["max_model_len"] = args.max_model_len
+    if args.enable_prefix_caching:
+        llm_kwargs["enable_prefix_caching"] = True
+    if args.num_scheduler_steps > 1:
+        llm_kwargs["num_scheduler_steps"] = args.num_scheduler_steps
+    if args.max_num_batched_tokens:
+        llm_kwargs["max_num_batched_tokens"] = args.max_num_batched_tokens
+    if args.trust_remote_code:
+        llm_kwargs["trust_remote_code"] = True
 
     llm = LLM(**llm_kwargs)
     elapsed = time.time() - start
     logger.info(f"Model loaded in {elapsed:.1f}s")
 
     model_name = os.path.basename(args.model)
-    app = create_app(llm, model_name)
+    app = create_app(llm, model_name, task=args.task)
 
     import uvicorn
     logger.info(f"Starting server on {args.host}:{args.port}")
