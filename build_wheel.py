@@ -94,6 +94,7 @@ REQUIRES_DIST = [
     "openai-harmony >= 0.0.3",
     "llguidance >= 1.3.0, < 1.4.0",
     "xgrammar == 0.1.29",
+    "numba == 0.61.2",
 ]
 
 
