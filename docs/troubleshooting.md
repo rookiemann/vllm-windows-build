@@ -6,7 +6,7 @@ Common errors when building or running the native Windows vLLM releases.
 
 ### RTX 20xx / SM 7.5 reports an unsupported architecture or stalls during startup
 
-The v0.26.0 release wheel includes SM 7.5 code, so this message does
+The v0.27.1 release wheel includes SM 7.5 code, so this message does
 not by itself mean that an RTX 2080/2080 Ti is excluded. Turing cannot use every
 newer attention backend or CUDA-graph path. Start with the compatibility profile
 and small resource limits:
@@ -26,13 +26,14 @@ value when VRAM is actually free; reduce context, sequences, and batched tokens
 to reduce the cache requirement. This is the launcher path for issue
 [#14](https://github.com/aivrar/vllm-windows-build/issues/14).
 
-### Installer says runtime 0.26.0 but expected 0.26.0+cu128
+### An old installer says runtime 0.26.0 but expected 0.26.0+cu128
 
 The wheel metadata is `0.26.0+cu128`, but upstream vLLM intentionally exposes
 the base module version `0.26.0`. The original v0.26 verifier compared those two
 different version fields directly and falsely reported installation failure.
 Pull the current repository and rerun `install.bat`; the verifier now checks
 the distribution build tag and runtime base version separately.
+The current 0.27.1 runtime and distribution both report `0.27.1`.
 
 ### A `.gguf` model fails with UTF-8 or invalid JSON errors
 
@@ -63,7 +64,7 @@ namespace rather than reusing incompatible data.
 
 ### Illegal memory access while loading offloaded KV blocks
 
-Install the current v0.26.0 release wheel. The Windows patch routes restores from
+Install the current v0.27.1 release wheel. The Windows patch routes restores from
 file-backed mmap through native CUDA DMA; the earlier Triton host-pointer route
 could fault for some grouped block shapes. If the problem persists, verify the
 installed wheel hash and run `python verify_install.py` before collecting a
@@ -181,12 +182,12 @@ implementation.
 
 Pull the latest repository and rerun `install.bat`; it force-reinstalls the
 corrected wheel even though its version is unchanged. For a manual install,
-force-reinstall the wheel attached to the published `v0.26.0-win-cu128`
+force-reinstall the wheel attached to the `v0.27.1-win-cu130`
 release. You can also use the locally built wheel in
-`E:\vllm-windows-build-v2\dist-v0.26.0`. Its SHA256 is:
+`E:\vllm-windows-build-v2\dist-v0.27.1`. Its SHA256 is:
 
 ```text
-A9FD2E5752D885A03C28AAA25472B9CDBE8685B4D3ED1A7CE3999803F0179658
+7C13ED44E94694478BDD4F5FCCA23E2D66BA1E8FA9BCCAD9FDDB8651D1B2447B
 ```
 
 Verify the repaired import with:
@@ -203,7 +204,7 @@ Python DLL search path **before** importing vLLM:
 
 ```python
 import os
-os.add_dll_directory(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin")
+os.add_dll_directory(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0\bin")
 os.add_dll_directory(r"E:\path\to\venv\Lib\site-packages\torch\lib")
 import vllm
 ```
@@ -233,7 +234,8 @@ allocation.
 problem by using `numpy.memmap` (file-backed, no commit charge) plus
 chunked GPU streaming. It's already enabled — if you're seeing this
 error you may have an older patched build. Re-apply
-`vllm-windows-v9.patch`.
+`vllm-windows-v10.patch` to a clean upstream v0.27.1 tree, or install the
+published wheel.
 
 ### `torch.OutOfMemoryError: CUDA out of memory. ... X GiB is free` <a id="oom-with-free-gpu"></a>
 
@@ -256,14 +258,14 @@ Then lower vLLM's reservation and concurrency settings:
 
 ### `ValueError: not enough values to unpack (expected 2, got 1)` in `torch.unique`
 
-You're running a mismatched PyTorch + vLLM combo. The v0.26.0 release wheel
-in this repo expects Python 3.13 and PyTorch 2.11.0+cu128. Reinstall with
+You're running a mismatched PyTorch + vLLM combo. The v0.27.1 release wheel
+in this repo expects Python 3.13 and PyTorch 2.13.0+cu130. Reinstall with
 `install.bat`, or in a manual venv reinstall:
 
 ```bat
-pip install torch==2.11.0 torchaudio==2.11.0 torchvision==0.26.0 ^
-    --index-url https://download.pytorch.org/whl/cu128
-pip install --force-reinstall E:\vllm-windows-build-v2\dist-v0.26.0\vllm-0.26.0+cu128-cp313-cp313-win_amd64.whl
+pip install torch==2.13.0 torchaudio==2.11.0 torchvision==0.28.0 ^
+    --index-url https://download.pytorch.org/whl/cu130
+pip install --force-reinstall E:\vllm-windows-build-v2\dist-v0.27.1\vllm-0.27.1-cp313-cp313-win_amd64.whl
 ```
 
 ### `pyo3_runtime.PanicException: Python API call failed`
@@ -294,12 +296,13 @@ Then re-run `build.bat`.
 ### `cl : error C2018: unknown character 'or' / 'and' / 'not'`
 
 MSVC doesn't accept `or` / `and` / `not` as keywords by default. The
-patch fixes every known instance - make sure `vllm-windows-v9.patch`
+patch fixes every known instance - make sure `vllm-windows-v10.patch`
 applied cleanly:
 
 ```bat
 cd vllm-source
-git apply --check ..\vllm-windows-v9.patch
+git checkout v0.27.1
+git apply --check ..\vllm-windows-v10.patch
 ```
 
 If the check fails, the patch is partially applied or the source has
@@ -307,16 +310,17 @@ been modified. Reset:
 
 ```bat
 cd vllm-source
-git checkout v0.25.1
-git reset --hard v0.25.1
-git apply ..\vllm-windows-v9.patch
+git checkout v0.27.1
+git reset --hard v0.27.1
+git apply ..\vllm-windows-v10.patch
 ```
 
 ### `nvcc fatal: Unsupported gpu architecture 'compute_120'`
 
 Your CUDA toolkit doesn't support Blackwell (SM 12.0). Either:
 - Lower `TORCH_CUDA_ARCH_LIST` (drop `12.0` from the list)
-- Or upgrade to CUDA 12.8+
+- Or install CUDA 13.0 Update 2 to reproduce the current build. CUDA 12.8 was
+  the minimum used by the older cu128 releases.
 
 ### `error C1061: compiler limit: blocks nested too deeply`
 

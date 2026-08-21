@@ -1,5 +1,50 @@
 # Changelog
 
+## v0.27.1-win-cu130 - 2026-08-21
+
+Release notes: [docs/v0.27.1-release-notes.md](docs/v0.27.1-release-notes.md)
+
+Upstream bump to **vLLM 0.27.1**, CPython 3.13, CUDA 13.0, PyTorch
+2.13.0+cu130, Triton Windows 3.7.1.post27, and
+`TORCH_CUDA_ARCH_LIST=7.5;8.6;8.9;12.0`.
+
+### New and fixed
+
+- Ported the native Windows runtime, serving, FlashAttention, Rust, sampling,
+  and tiered KV-cache changes onto vLLM 0.27.1.
+- Packaged vLLM's new stable-libtorch CUDA and MoE modules plus optimized
+  `vllm-rs.exe` and `_rust_tool_parser.pyd` artifacts.
+- Added MSVC fixes for CUDA 13 attention math/types and guarded the few
+  SM120-only CUTLASS FP8/NVFP4 entry points whose aligned by-value parameters
+  are incompatible with the Windows x64 ABI.
+- Updated the portable installer contract to Torch 2.13.0+cu130, CUDA 13.0,
+  Triton Windows 3.7.1.post27, and the 0.27.1 wheel hash.
+- Updated the real-model KV harness for vLLM 0.27's `CacheConfig` API.
+- Fixed FastAPI request-annotation resolution under Python's postponed
+  annotations so JSON embedding/chat requests are not mistaken for a required
+  query parameter.
+- Exported the exact upstream-v0.27.1 source delta as
+  `vllm-windows-v10.patch` (167,335 bytes; SHA-256
+  `4b6c9cd543414ef3ed1eb7fcbd7f39ce6be10bdc97d901261977ee905346c988`).
+
+### Validation
+
+- Installed-wheel native imports and Qwen3.5 9B GPTQ OpenAI-compatible API
+  serving passed on an RTX 3090.
+- Three requests completed without errors and recorded 1,056 prefix-cache hits
+  from 2,952 prompt tokens.
+- The fixed integrated launcher returned HTTP 200 for health and chat
+  completion; the measured request completed in 2.918 s.
+- All six Multi-TurboQuant cache formats passed direct GPU write/decode smoke
+  tests with the pinned companion wheel.
+- CPU LRU, filesystem eviction/restore, and fresh-process persistent reuse each
+  restored 1,056 of 1,452 prompt tokens with exact generated token IDs.
+- Focused Windows KV and hybrid-block regressions: 80 passed, 1 expected skip,
+  0 failed.
+- Repository release contracts: 24 passed, 0 failed.
+- Final wheel: 239,025,534 bytes; SHA-256
+  `7c13ed44e94694478bdd4f5fcca23e2d66ba1e8fa9bccad9fddb8651d1b2447b`.
+
 ## v0.26.0-win-cu128 - 2026-07-31
 
 Upstream bump to **vLLM 0.26.0**, targeting CPython 3.13, CUDA 12.8,

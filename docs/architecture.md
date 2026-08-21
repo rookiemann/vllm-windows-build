@@ -1,9 +1,8 @@
 # Architecture
 
-How the v0.26.0 Windows release hangs together and what each piece
-owns. The v0.25.1 patch and release layout mentioned below are historical;
-the current native source and wheel are produced in
-`E:\vllm-windows-build-v2`.
+How the v0.27.1 Windows release hangs together and what each piece
+owns. The current patch is based on upstream v0.27.1; the native source and
+wheel are produced in `E:\vllm-windows-build-v2`.
 
 ## Repository Layout
 
@@ -11,7 +10,7 @@ the current native source and wheel are produced in
 vllm-windows-build/
   README.md
   VLLM.md
-  vllm-windows-v9.patch
+  vllm-windows-v10.patch
   build.bat
   run_build.bat
   install.bat
@@ -22,19 +21,20 @@ vllm-windows-build/
   verify_install.py
   engine_dispatcher.py
   vllm_launcher.py
-  docs/v0.26.0-build-candidate.md
+  docs/v0.27.1-build-candidate.md
   docs/
   tests/
 ```
 
 ## Layer 1: Windows Compatibility Patch
 
-`vllm-windows-v9.patch` is a unified diff against upstream
-`vllm-project/vllm` tag `v0.25.1`.
+`vllm-windows-v10.patch` is the exact committed unified diff against upstream
+`vllm-project/vllm` tag `v0.27.1`. Older patch files are retained only for
+their matching historical releases.
 
 Main categories:
 
-- Build system: MSVC/CUDA flags, CUDA 12.8 paths, CUTLASS patching, and
+- Build system: MSVC/CUDA flags, CUDA 13.0 paths, CUTLASS patching, and
   skips for Linux-only optional extensions, plus Windows-safe generated
   FlashAttention Python-file copy-back.
 - CUDA kernels: MSVC compatibility for GCC-only syntax and generated
@@ -49,10 +49,10 @@ Main categories:
 
 See [build.md](build.md) for the current build flow.
 
-The wheel assembler overlays generated FlashAttention Python modules from
-the fetched dependency when needed and refuses to produce an artifact if
-the rotary or CuteDSL payload is incomplete. `tests/test_wheel_contents.py`
-then validates every ZIP member against wheel RECORD before release.
+The 0.27.1 setup path packages the locally precompiled native and optimized
+Rust artifacts without downloading an upstream Linux wheel.
+`tests/test_wheel_contents.py` validates the required payloads and every ZIP
+member against wheel RECORD before release.
 
 ## Layer 2: Portable Installer
 
@@ -62,17 +62,16 @@ then validates every ZIP member against wheel RECORD before release.
 2. Adds CPython development files (`Include\Python.h` and
    `libs\python313.lib`) from the Python NuGet package for Triton's
    runtime CUDA helper compilation.
-3. Installs PyTorch 2.11.0+cu128 and `triton-windows`.
-4. Verifies and installs the v0.26.0+cu128 wheel, the pinned Multi-TurboQuant
+3. Installs PyTorch 2.13.0+cu130 and `triton-windows` 3.7.1.post27.
+4. Verifies and installs the v0.27.1 wheel, the pinned Multi-TurboQuant
    wheel, and structured-output backends.
    Artifacts are downloaded through `.part` files and the install marker stores
    both release SHA-256 values only after the full runtime check succeeds.
 5. Verifies both `import vllm` and Triton's CUDA driver path.
 
-The vLLM module exposes upstream's base runtime version (`0.26.0`), while the
-installed distribution metadata retains the Windows build tag
-(`0.26.0+cu128`). The runtime verifier checks these as separate fields so it
-still rejects a wrong wheel without falsely rejecting the correct build.
+The vLLM module and installed distribution metadata both report `0.27.1`.
+The runtime verifier separately enforces Torch 2.13.0+cu130 and Triton 3.7.1
+so a wrong binary stack is rejected even when the package version matches.
 
 Before Python exists, `verify_bootstrap.ps1` computes SHA-256 through .NET and
 `expand_zip.ps1` extracts archives through `System.IO.Compression`. This avoids

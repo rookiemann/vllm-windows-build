@@ -1,8 +1,8 @@
-# vLLM v0.26.0 Windows Quick Reference
+# vLLM v0.27.1 Windows Quick Reference
 
-> **v0.26.0 release:** The new SM 7.5/8.6/8.9/12.0 wheel and RTX 20xx
-> launcher profile are documented in [the release build record](docs/v0.26.0-build-candidate.md).
-> The release is published with both wheels attached.
+> **v0.27.1 release:** The CUDA 13.0 SM 7.5/8.6/8.9/12.0 wheel, RTX 20xx
+> launcher profile, and GPU/cache measurements are documented in
+> [the release build record](docs/v0.27.1-build-candidate.md).
 
 A condensed page for getting a model running fast. For full documentation
 see [docs/](docs/).
@@ -13,9 +13,9 @@ see [docs/](docs/).
 install.bat
 ```
 
-This downloads embedded Python 3.13.14, installs PyTorch 2.11.0+cu128,
+This downloads embedded Python 3.13.14, installs PyTorch 2.13.0+cu130,
 triton-windows, structured-output backends, Multi-TurboQuant, and the
-v0.26.0 wheel. It is self-contained in this directory.
+v0.27.1 wheel. It is self-contained in this directory.
 
 ## One-Line Run
 
@@ -38,7 +38,7 @@ import os
 
 os.environ["VLLM_HOST_IP"] = "127.0.0.1"
 
-os.add_dll_directory(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin")
+os.add_dll_directory(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0\bin")
 os.add_dll_directory(r"C:\path\to\venv\Lib\site-packages\torch\lib")
 
 from vllm import LLM, SamplingParams
@@ -109,15 +109,15 @@ python\Scripts\vllm.exe serve --help
 Expected runtime and distribution versions:
 
 ```text
-0.26.0
-0.26.0+cu128
+0.27.1
+0.27.1
 ```
 
 ## Environment
 
-- vLLM 0.26.0+cu128 (SM 7.5/8.6/8.9/12.0)
-- PyTorch 2.11.0+cu128
-- Triton 3.6.0.post26 via triton-windows
+- vLLM 0.27.1 (SM 7.5/8.6/8.9/12.0)
+- PyTorch 2.13.0+cu130
+- Triton 3.7.1.post27 via triton-windows
 - Python 3.13.14
-- CUDA Toolkit 12.8 for builds
+- CUDA Toolkit 13.0 for builds
 - Windows 10/11

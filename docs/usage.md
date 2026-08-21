@@ -1,6 +1,6 @@
 # Usage
 
-How to actually run vLLM v0.26.0 on Windows after installing it. Three
+How to actually run vLLM v0.27.1 on Windows after installing it. Three
 modes covered: **(A)** Python embedding, **(B)** OpenAI-compatible HTTP
 server via `vllm_launcher.py`, **(C)** the raw `vllm serve` upstream
 CLI.
@@ -116,7 +116,7 @@ python vllm_launcher.py ^
 
 ### RTX 20xx / Turing (SM 7.5)
 
-The v0.26.0 Windows release wheel contains CUDA code for SM 7.5, but
+The v0.27.1 Windows release wheel contains CUDA code for SM 7.5, but
 some newer attention and CUDA-graph paths are not available on Turing. If the
 integrated launcher reports an unsupported architecture, start with its
 compatibility profile:
@@ -250,7 +250,7 @@ Then load-balance with nginx or your own router.
 
 ## (C) Upstream `vllm serve`
 
-vLLM v0.26.0 ships an OpenAI-compatible server out of the box at
+vLLM v0.27.1 ships an OpenAI-compatible server out of the box at
 `vllm serve`. It works on Windows after the patches are applied:
 
 ```bat

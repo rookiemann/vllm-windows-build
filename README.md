@@ -2,42 +2,44 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%2F11-blue)
-![vLLM: v0.26.0](https://img.shields.io/badge/vLLM-v0.26.0-orange)
-![CUDA: 12.8](https://img.shields.io/badge/CUDA-12.8-76B900)
+![vLLM: v0.27.1](https://img.shields.io/badge/vLLM-v0.27.1-orange)
+![CUDA: 13.0](https://img.shields.io/badge/CUDA-13.0-76B900)
 ![Python: 3.13](https://img.shields.io/badge/Python-3.13-3776AB)
-![PyTorch: 2.11](https://img.shields.io/badge/PyTorch-2.11.0-EE4C2C)
-![Triton: 3.6](https://img.shields.io/badge/Triton-3.6-red)
+![PyTorch: 2.13](https://img.shields.io/badge/PyTorch-2.13.0-EE4C2C)
+![Triton: 3.7](https://img.shields.io/badge/Triton-3.7.1-red)
 ![GPU: SM 7.5-12.0](https://img.shields.io/badge/GPU-SM%207.5%20%E2%86%92%2012.0-76B900)
 ![Multi-TurboQuant](https://img.shields.io/badge/Multi--TurboQuant-6%20methods-purple)
 ![+ Upstream TurboQuant](https://img.shields.io/badge/+%20Upstream%20TurboQuant-4%20variants-purple)
 
-## v0.26.0 Windows release
+## v0.27.1 Windows release
 
-The new native Windows **vLLM 0.26.0 + CUDA 12.8 / Python 3.13** wheel has
-been built and validated in `E:\vllm-windows-build-v2`. It includes kernels for
+The native Windows **vLLM 0.27.1 + CUDA 13.0 / Python 3.13** wheel is built
+and GPU-validated in `E:\vllm-windows-build-v2`. It includes kernels for
 RTX 20xx/Turing (SM 7.5), RTX 30xx (SM 8.6), RTX 40xx (SM 8.9), and Blackwell
-(SM 12.0), plus the Windows Rust/tool-parser and KV-offload fixes carried from
-this project. The 389 MB wheel imports cleanly and served a real Qwen3-14B
-request on the RTX 3090. Its SHA-256 is:
+(SM 12.0), stable-libtorch CUDA/MoE modules, FlashAttention 2, the optimized
+Rust frontend/tool parser, Multi-TurboQuant, and opt-in Windows CPU/filesystem
+prompt-KV tiers. The 239,025,534-byte wheel served a real Qwen3.5 9B GPTQ
+model on an RTX 3090 and passed CPU plus persistent filesystem cache restores.
+Its SHA-256 is:
 
 ```text
-a9fd2e5752d885a03c28aaa25472b9cdbe8685b4d3ed1a7ce3999803f0179658
+7c13ed44e94694478bdd4f5fcca23e2d66ba1e8fa9bccad9fddb8651d1b2447b
 ```
 
-The release is published as
-[`v0.26.0-win-cu128`](https://github.com/aivrar/vllm-windows-build/releases/tag/v0.26.0-win-cu128),
-with both wheels attached. For RTX 20xx users,
-the launcher now provides `--turing-compat`,
+The release tag is
+[`v0.27.1-win-cu130`](https://github.com/aivrar/vllm-windows-build/releases/tag/v0.27.1-win-cu130).
+For RTX 20xx users, the launcher provides `--turing-compat`,
 which selects `TRITON_ATTN`, float16 KV cache, 32-token blocks, and eager mode.
 See [the Turing usage notes](docs/usage.md#rtx-20xx--turing-sm-75) and
-[the full release build record](docs/v0.26.0-build-candidate.md), plus
+[the release notes](docs/v0.27.1-release-notes.md) and
+[full build record](docs/v0.27.1-build-candidate.md), plus
 [issue #14](https://github.com/aivrar/vllm-windows-build/issues/14).
 
-**Native Windows build of vLLM 0.26.0 - no WSL, no Docker, no Linux VM.**
+**Native Windows build of vLLM 0.27.1 - no WSL, no Docker, no Linux VM.**
 
-> **Current build (cu128 / Python 3.13 / SM 7.5-12.0):** updated to
-> **vLLM 0.26.0** with RTX 20-/30-/40-/50-series kernels
-> (`TORCH_CUDA_ARCH_LIST=7.5;8.6;8.9;12.0`), PyTorch 2.11.0+cu128, CUDA 12.8,
+> **Current build (cu130 / Python 3.13 / SM 7.5-12.0):** updated to
+> **vLLM 0.27.1** with RTX 20-/30-/40-/50-series kernels
+> (`TORCH_CUDA_ARCH_LIST=7.5;8.6;8.9;12.0`), PyTorch 2.13.0+cu130, CUDA 13.0,
 > the Windows API-server/Rust fixes, Turing launcher compatibility profile,
 > Multi-TurboQuant, and opt-in CPU/filesystem KV offload.
 
@@ -48,16 +50,18 @@ upstream TurboQuant variants that landed in v0.19.2rc0 (`turboquant_k8v4`,
 
 vLLM is the most popular open-source LLM serving engine, but it
 officially only supports Linux. This repo provides a **pre-built wheel**
-(just download and install), the maintained v0.25.1 patchset, and the v2
-v0.26.0 build workflow for compiling vLLM natively on Windows with full CUDA
+(just download and install), the current v10 source patch, historical
+patchsets, and the v2
+v0.27.1 build workflow for compiling vLLM natively on Windows with full CUDA
 acceleration, Triton support, and Multi-TurboQuant integration.
 
 ## Releases
 
 | Release | vLLM | PyTorch | Triton | KV compression | Download |
 |---|---|---|---|---|---|
-| **v0.26.0-win-cu128 (latest)** | 0.26.0 | 2.11.0+cu128 | 3.6.0 | Multi-TurboQuant (6) + upstream TurboQuant (4) + fp8; **SM 7.5/8.6/8.9/12.0, Turing profile, CPU/filesystem KV offload, Rust frontend + tool parser** | [Release page](https://github.com/aivrar/vllm-windows-build/releases/tag/v0.26.0-win-cu128) |
-| v0.25.1-win-cu128 (previous release) | 0.25.1 | 2.11.0+cu128 | 3.6.0 | Multi-TurboQuant + upstream TurboQuant + fp8; CPU/filesystem KV offload, SM 8.6/8.9/12.0 | [Download](https://github.com/aivrar/vllm-windows-build/releases/tag/v0.25.1-win-cu128) |
+| **v0.27.1-win-cu130 (latest)** | 0.27.1 | 2.13.0+cu130 | 3.7.1 | Multi-TurboQuant (6) + upstream TurboQuant (4) + fp8; **SM 7.5/8.6/8.9/12.0, Qwen3.5, Turing profile, CPU/filesystem KV offload, optimized Rust frontend + tool parser** | [Release page](https://github.com/aivrar/vllm-windows-build/releases/tag/v0.27.1-win-cu130) |
+| v0.26.0-win-cu128 (previous release) | 0.26.0 | 2.11.0+cu128 | 3.6.0 | Multi-TurboQuant (6) + upstream TurboQuant (4) + fp8; SM 7.5/8.6/8.9/12.0, Turing profile, CPU/filesystem KV offload, Rust frontend + tool parser | [Download](https://github.com/aivrar/vllm-windows-build/releases/tag/v0.26.0-win-cu128) |
+| v0.25.1-win-cu128 | 0.25.1 | 2.11.0+cu128 | 3.6.0 | Multi-TurboQuant + upstream TurboQuant + fp8; CPU/filesystem KV offload, SM 8.6/8.9/12.0 | [Download](https://github.com/aivrar/vllm-windows-build/releases/tag/v0.25.1-win-cu128) |
 | v0.24.0-win-cu128 | 0.24.0 | 2.11.0+cu128 | 3.6.0 | Multi-TurboQuant (6) + upstream TurboQuant (4) + fp8 - Python 3.13, Blackwell sm_120, Rust frontend + Rust tool parser included | [Download](https://github.com/aivrar/vllm-windows-build/releases/tag/v0.24.0-win-cu128) |
 | v0.23.0-win-cu128 | 0.23.0 | 2.11.0+cu128 | 3.6.0 | Multi-TurboQuant (6) + upstream TurboQuant (4) + fp8 - **Python 3.13, Blackwell sm_120, Rust frontend included** | [Download](https://github.com/aivrar/vllm-windows-build/releases/tag/v0.23.0-win-cu128) |
 | v0.21.0-win-cu128 | 0.21.0 | 2.11.0+cu128 | 3.6.0 | Multi-TurboQuant (6) + upstream TurboQuant (4) + fp8 — **Python 3.13, Blackwell sm_120** | [Download](https://github.com/aivrar/vllm-windows-build/releases/tag/v0.21.0-win-cu128) |
@@ -67,7 +71,31 @@ acceleration, Triton support, and Multi-TurboQuant integration.
 | v0.17.1-win | 0.17.1 | 2.10.0+cu126 | 3.6.0 | TurboQuant (2 recipes) | [Download](https://github.com/aivrar/vllm-windows-build/releases/tag/v0.17.1-win) |
 | v0.14.2-win | 0.14.2 | 2.9.1+cu126 | n/a | fp8 only | [Download](https://github.com/aivrar/vllm-windows-build/releases/tag/v0.14.2-win) |
 
-### What's new in v0.26.0
+### What's new in v0.27.1
+
+- **Upstream vLLM 0.27.1** and its CUDA 13.0 / PyTorch 2.13.0 / Triton 3.7.1
+  baseline, with native Windows CUDA, serving, Rust, and FlashAttention
+  packaging carried forward.
+- **Qwen3.5 GPTQ serving verified** from the final installed wheel with
+  AutoGPTQ/Marlin and a local 9B checkpoint on the RTX 3090.
+- **New stable-libtorch layout**: both CUDA and MoE stable-ABI modules are
+  built and packaged alongside the allocator, filesystem helper, spinloop,
+  FlashAttention 2, Rust frontend, and Rust tool parser.
+- **Prompt caching verified**: three 984-token requests produced 1,056 cached
+  prompt-token hits out of 2,952 total and completed without request errors.
+- **Windows tiered KV cache revalidated**: CPU LRU, forced filesystem eviction
+  and restore, and fresh-process persistent reuse each restored 1,056 of 1,452
+  prompt tokens with exact generated token IDs.
+- **Regression suite**: 80 focused Windows KV/file-mapping/shared-region and
+  hybrid-block tests passed, with one expected platform-gated skip.
+- **Known Windows build limit**: a few specialized SM120-only CUTLASS FP8 and
+  NVFP4/MoE entry points are omitted because their aligned parameter ABI is
+  incompatible with MSVC x64. Other SM120 kernels remain in the wheel.
+
+See the [v0.27.1 release build record](docs/v0.27.1-build-candidate.md) for
+the exact wheel hash, measured results, and scope.
+
+### What's new in v0.26.0 (previous stable)
 
 - **Upstream vLLM 0.26.0** with native Windows CUDA/MSVC, serving, Rust, and
   FlashAttention packaging carried forward from the previous release.
@@ -285,7 +313,35 @@ Single 24 GB RTX 3090, Qwen3-14B AWQ-4bit, `gpu_memory_utilization=0.5`:
 | `auto` (fp16) | 16,336 | 31.91× | 1.00× |
 | `isoquant3`/`4`, `planarquant3`/`4`, `turboquant25`/`35` | **32,672** | **63.94×** | **2.00×** |
 
-### v0.26.0 GPU validation
+### v0.27.1 GPU and KV-tier validation
+
+The final `vllm-0.27.1-cp313-cp313-win_amd64.whl` was installed outside the
+source tree and tested on an RTX 3090 with the local
+`Qwen3.5-9B-abliterated-GPTQ-4bit` checkpoint.
+
+| Check | Result |
+|---|---|
+| Wheel | 239,025,534 bytes; SHA-256 `7c13ed44e94694478bdd4f5fcca23e2d66ba1e8fa9bccad9fddb8651d1b2447b` |
+| Runtime | Python 3.13.11, vLLM 0.27.1, Torch 2.13.0+cu130, CUDA 13.0, Triton 3.7.1 |
+| Native payload | All packaged CUDA, FlashAttention 2, allocator, filesystem, spinloop, and Rust modules imported |
+| API requests | 3 succeeded, 0 errors; 984 prompt + 96 generated tokens each |
+| Integrated launcher | `/health` and `/v1/chat/completions` HTTP 200; 17 prompt + 24 generated tokens in 2.918 s |
+| Multi-TurboQuant GPU paths | All six local cache formats passed write/decode smoke tests |
+| Request wall time | 18.787 s cold, then 12.887 s and 12.872 s |
+| Prefix cache | 1,056 hits / 2,952 prompt tokens (35.77%) |
+| 4K KV capacity | 11.52 GiB; 208,896 tokens; 51.00x reported concurrency |
+| Focused regressions | 80 passed, 1 expected skip, 0 failed |
+
+CPU LRU restored 1,056 of 1,452 tokens after clearing the GPU cache and
+reduced the measured request from 3.529 s to 1.027 s. Filesystem LRU restored
+the same 1,056 tokens after forced RAM eviction (1.244 s cold, 0.840 s
+restored), then produced a persistent first-request hit after a fresh engine
+start. All restored runs reproduced the cold run's generated token IDs.
+
+Full commands, filesystem counts, and scope are in the
+[v0.27.1 build record](docs/v0.27.1-build-candidate.md).
+
+### v0.26.0 GPU validation (previous release)
 
 The v0.26.0 release wheel was validated after installation from
 `E:\vllm-windows-build-v2\dist-v0.26.0` (389,473,142 bytes; SHA-256
@@ -306,11 +362,11 @@ and tool parser, FlashAttention 2, and the Windows KV-offload helper.
   and contract tests**; the published wheel's complete contents, 389,473,142
   byte size, and SHA-256 were revalidated unchanged.
 
-This is release evidence for the wheel and launcher, not a claim that every
-checkpoint is compatible. The exact Qwen3.5-9B GPTQ directory currently has a
-Transformers `Qwen3_5TextConfig`/vLLM `Qwen3_5Config` mismatch, and an 11-GB
-RTX 2080 Ti may need lower `--max-model-len` and concurrency during startup.
-The tested profile now applies those 11-GB-card limits automatically.
+That v0.26.0 run did not support the local Qwen3.5-9B GPTQ directory because
+of its older Transformers/vLLM config path. Upstream 0.27.1 resolves that
+specific limitation, and the model is now part of the current release
+evidence. An 11-GB RTX 2080 Ti can still require lower `--max-model-len` and
+concurrency during startup; `--turing-compat` applies those limits.
 
 ### v0.25.1 KV-offload validation (previous stable)
 
@@ -345,17 +401,17 @@ KV-offload evidence and scope →
 ### Option A — Pre-built wheel (no compiler needed)
 
 Download
-**[vllm-0.26.0+cu128-cp313-cp313-win_amd64.whl](https://github.com/aivrar/vllm-windows-build/releases/tag/v0.26.0-win-cu128)**
+**[vllm-0.27.1-cp313-cp313-win_amd64.whl](https://github.com/aivrar/vllm-windows-build/releases/tag/v0.27.1-win-cu130)**
 and `multi_turboquant-0.1.0-py3-none-any.whl` from the release page,
 then:
 
-> Download the v0.26.0 wheel from the release page above, or install the local
+> Download the v0.27.1 wheel from the release page above, or install the local
 > copy from
-> `E:\vllm-windows-build-v2\dist-v0.26.0`.
+> `E:\vllm-windows-build-v2\dist-v0.27.1`.
 
 | Artifact | SHA-256 |
 |---|---|
-| `vllm-0.26.0+cu128-cp313-cp313-win_amd64.whl` | `A9FD2E5752D885A03C28AAA25472B9CDBE8685B4D3ED1A7CE3999803F0179658` |
+| `vllm-0.27.1-cp313-cp313-win_amd64.whl` | `7C13ED44E94694478BDD4F5FCCA23E2D66BA1E8FA9BCCAD9FDDB8651D1B2447B` |
 | `multi_turboquant-0.1.0-py3-none-any.whl` | `5B310E05904B588539D9A8E3374DFA6C160F025F9C2099BA5C7877C79B2FA149` |
 
 ```batch
@@ -363,18 +419,18 @@ then:
 py -3.13 -m venv venv
 venv\Scripts\activate
 
-:: Install PyTorch 2.11.0 with CUDA 12.8 (cu128 = Blackwell support)
-pip install torch==2.11.0 ^
-    --index-url https://download.pytorch.org/whl/cu128
+:: Install the exact PyTorch CUDA 13.0 stack used by vLLM 0.27.1
+pip install torch==2.13.0 torchaudio==2.11.0 torchvision==0.28.0 ^
+    --index-url https://download.pytorch.org/whl/cu130
 
 :: Install Triton for Windows
-pip install triton-windows==3.6.0.post26
+pip install triton-windows==3.7.1.post27
 
 :: Install the pre-built vLLM wheel
-pip install vllm-0.26.0+cu128-cp313-cp313-win_amd64.whl
+pip install vllm-0.27.1-cp313-cp313-win_amd64.whl
 
 :: Optional repair for environments created from older wheel metadata.
-:: v0.26.0 itself includes the correct Windows AMD64 dependency markers.
+:: v0.27.1 itself includes the correct Windows AMD64 dependency markers.
 pip install "llguidance>=1.7.0,<1.8.0" "xgrammar>=0.2.0,<1.0.0"
 
 :: Install Multi-TurboQuant for the 6 KV cache compression methods
@@ -382,9 +438,9 @@ pip install multi_turboquant-0.1.0-py3-none-any.whl
 ```
 
 Or just run **`install.bat`** for a fully self-contained, one-click portable
-Python install — it downloads Python 3.13, PyTorch cu128, and the vLLM wheel
+Python install — it downloads Python 3.13, PyTorch cu130, and the vLLM wheel
 itself (no manual download or folder creation needed). If you already have the
-`.whl` locally, drop it in `dist-v0.26.0\` next to `install.bat` and the script uses
+`.whl` locally, drop it in `dist-v0.27.1\` next to `install.bat` and the script uses
 that instead of downloading.
 
 Fresh installs use Python 3.13.14. Rerunning `install.bat` repairs an existing
@@ -394,13 +450,12 @@ FlashAttention modules, marker hash, headers, or import checks are incomplete;
 The installer also downloads the pinned `multi_turboquant-0.1.0` release wheel;
 Git is not required for the portable path.
 
-The wheel distribution is versioned `0.26.0+cu128`, while upstream vLLM
-reports `vllm.__version__ == "0.26.0"` at runtime. The installer verifies both
-values separately; seeing the base runtime version is expected.
+Both the wheel distribution and `vllm.__version__` report `0.27.1`. The CUDA
+compatibility contract is verified separately through Torch 2.13.0+cu130.
 
 ### Option B — Build from source
 
-Requires Visual Studio 2022 (Community is fine), CUDA 12.8, and a Python 3.13
+Requires Visual Studio 2022 (Community is fine), CUDA 13.0, and a Python 3.13
 venv. The v2 build script compiles four targets (7.5;8.6;8.9;12.0).
 (the CUDA compile dominates; see notes below). Use the worker count that fits
 the machine and **do not
@@ -410,12 +465,12 @@ on the heavy multi-arch CUDA kernels.
 The tested v2 machine used `MAX_JOBS=8`; reduce that value if your available
 RAM is lower.
 
-The reproducible v0.26.0 build is maintained in the separate build workspace
+The reproducible v0.27.1 build is maintained in the separate build workspace
 `E:\vllm-windows-build-v2`. Use its
-`build_cu128_py313_v0.26.0.bat` script for the native compile, then package the
+`build_cu130_py313_v0.27.1.bat` script for the native compile, then package the
 already-built tree with `VLLM_USE_LOCAL_PRECOMPILED=1`. The exact environment,
 source commit, and output contract are recorded in
-[the release build record](docs/v0.26.0-build-candidate.md).
+[the release build record](docs/v0.27.1-build-candidate.md).
 
 The historical v0.25.1 patch also drops `cutlass-windows.patch` and
 `vllm-flash-attn-cutlass-windows.patch` into `vllm-source/`. The build's
@@ -423,7 +478,7 @@ CMakeLists.txt applies them automatically to the FetchContent-managed
 `.deps/cutlass-src/` and `.deps/vllm-flash-attn-src/csrc/cutlass` after
 the first configure, so you don't need a separate step.
 
-For the v0.26.0 Rust frontend, install `protoc` and set
+For the v0.27.1 Rust frontend, install `protoc` and set
 `PROTOC=C:\path\to\protoc.exe` before running the build if it is not already
 on PATH.
 
@@ -475,7 +530,7 @@ For OpenAI-compatible HTTP serving and more usage patterns:
 
 ## KV cache compression: 10 methods (6 ours + 4 upstream)
 
-vLLM v0.26.0 on Windows ships with integrated support for **ten** KV cache
+vLLM v0.27.1 on Windows ships with integrated support for **ten** KV cache
 compression dtypes. The four `turboquant_*` entries are the new upstream
 TurboQuant attention backend (PR #38479, landed in v0.19.2rc0); the six
 others come from our [Multi-TurboQuant](https://github.com/aivrar/multi-turboquant)
@@ -512,11 +567,11 @@ fused Triton kernels and don't pay this cost.  See
 
 ## What's in the patch
 
-The v0.26.0 source tree carries the Windows changes listed in the release
-build record. The historical `vllm-windows-v9.patch` remains a unified diff
-against `vllm-project/vllm` at tag `v0.25.1`; it documents the previous release
-and is not the v0.26.0 source snapshot. The current changes touch the Windows
-build/runtime/Rust frontend and
+`vllm-windows-v10.patch` is the exact committed delta from upstream tag
+`v0.27.1` to the release source. Its SHA-256 is
+`4b6c9cd543414ef3ed1eb7fcbd7f39ce6be10bdc97d901261977ee905346c988`.
+The historical `vllm-windows-v9.patch` remains the v0.25.1 snapshot. The
+current changes touch the Windows build/runtime/Rust frontend and
 KV-offload surfaces, and carries the TQ dispatch helper plus two
 CUTLASS-vendor patches:
 
@@ -577,10 +632,10 @@ All changes are guarded by `#ifdef _MSC_VER`, `sys.platform == "win32"`,
 | GPU | NVIDIA SM 7.5+ (RTX 20/30/40/50, A100, H100) | RTX 3090 / 4090 / A6000 |
 | VRAM | 12 GB | 24 GB |
 | RAM | 16 GB | 32+ GB |
-| CUDA driver | R570+ (Blackwell needs R570+) | latest |
+| CUDA driver | R580+ (CUDA 13.0) | latest |
 | Python | 3.13.x | 3.13.14 |
 | Compiler (build only) | VS 2022 Community + Win 10 SDK | Same |
-| CUDA Toolkit (build only) | 12.8 (first toolkit with sm_120) | 12.8 |
+| CUDA Toolkit (build only) | 13.0 | 13.0 Update 2 |
 
 For build-from-source, you also need a **Windows pagefile** (system
 managed is fine). Without it, large allocations during compilation can
@@ -590,13 +645,12 @@ fail. See [docs/troubleshooting.md → OSError 1455](docs/troubleshooting.md#ose
 
 ## Tested with
 
-- RTX 3090 (24 GB, SM 8.6, driver 596.36) - v0.26.0 release wheel, native imports, and direct Qwen3-14B HTTP serving; prior v0.25.1 wheel also has the GPU offload matrix and real-model RAM/filesystem cache tests
-- RTX 3060 (12 GB, SM 8.6) - v0.26.0 release wheel through the integrated launcher and Turing-compatible profile
-- Qwen2.5-0.5B-Instruct (smoke test), Qwen3-14B-abliterated-AWQ-4bit
-- Qwen3.5-9B-abliterated-GPTQ-4bit remains blocked by the upstream text-only Qwen3.5 registry/config path and was not used as release evidence
+- RTX 3090 (24 GB, SM 8.6, driver 596.36) - v0.27.1 final wheel, native imports, Qwen3.5 GPTQ API serving, prompt-cache metrics, CPU LRU restore, filesystem eviction/restore, and persistent restart reuse
+- RTX 3060 (12 GB, SM 8.6) - previous v0.26.0 wheel through the integrated launcher and Turing-compatible profile
+- Qwen2.5-0.5B-Instruct, Qwen3-14B-abliterated-AWQ-4bit, and Qwen3.5-9B-abliterated-GPTQ-4bit
 - Windows 10 Pro 22H2
 - Visual Studio 2022 Community 17.13 (MSVC 14.43)
-- CUDA Toolkit 12.8
+- CUDA Toolkit 13.0 Update 2 (`nvcc` 13.0.88)
 - Python 3.13.11 for the native build/final-wheel tests; portable installer targets Python 3.13.14 (same `cp313` ABI)
 - RTX 50-series (Blackwell sm_120): kernels compiled & verified via `cuobjdump`; runtime confirmation pending community hardware
 

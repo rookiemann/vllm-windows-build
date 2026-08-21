@@ -6,9 +6,9 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-VLLM_SHA256 = "A9FD2E5752D885A03C28AAA25472B9CDBE8685B4D3ED1A7CE3999803F0179658"
+VLLM_SHA256 = "7C13ED44E94694478BDD4F5FCCA23E2D66BA1E8FA9BCCAD9FDDB8651D1B2447B"
 MTQ_SHA256 = "5B310E05904B588539D9A8E3374DFA6C160F025F9C2099BA5C7877C79B2FA149"
-PATCH_SHA256 = "4893BDB35F905237BD0D0D042E365EAFC5B6B4C49809747BE49B42E6D8BF7609"
+PATCH_SHA256 = "4B6C9CD543414EF3ED1EB7FCBD7F39CE6BE10BDC97D901261977EE905346C988"
 
 
 def batch_settings(path: Path) -> dict[str, str]:
@@ -35,30 +35,30 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertEqual(install["MTQ_SHA256"], MTQ_SHA256)
         self.assertEqual(launch["EXPECTED_WHEEL_SHA256"], VLLM_SHA256)
         self.assertEqual(launch["EXPECTED_MTQ_SHA256"], MTQ_SHA256)
-        self.assertEqual(install["WHEEL_SIZE"], "389473142")
+        self.assertEqual(install["WHEEL_SIZE"], "239025534")
         self.assertEqual(install["MTQ_SIZE"], "136429")
-        self.assertIn("v0.26.0-win-cu128", install["WHEEL_URL"])
-        self.assertIn("vllm-0.26.0+cu128-cp313-cp313-win_amd64.whl", install["WHEEL_URL"])
-        self.assertIn("dist-v0.26.0", install["WHEEL_FILE"])
+        self.assertIn("v0.27.1-win-cu130", install["WHEEL_URL"])
+        self.assertIn("vllm-0.27.1-cp313-cp313-win_amd64.whl", install["WHEEL_URL"])
+        self.assertIn("dist-v0.27.1", install["WHEEL_FILE"])
 
         verifier = (ROOT / "verify_install.py").read_text(encoding="utf-8")
-        candidate = (ROOT / "docs" / "v0.26.0-build-candidate.md").read_text(
+        candidate = (ROOT / "docs" / "v0.27.1-build-candidate.md").read_text(
             encoding="utf-8"
         )
-        self.assertIn('EXPECTED_VLLM_VERSION = "0.26.0+cu128"', verifier)
-        self.assertIn("vllm-0.26.0+cu128-cp313-cp313-win_amd64.whl", candidate)
-        self.assertIn("a9fd2e5752d885a03c28aaa25472b9cdbe8685b4d3ed1a7ce3999803f0179658", candidate)
+        self.assertIn('EXPECTED_VLLM_VERSION = "0.27.1"', verifier)
+        self.assertIn("vllm-0.27.1-cp313-cp313-win_amd64.whl", candidate)
+        self.assertIn("7c13ed44e94694478bdd4f5fcca23e2d66ba1e8fa9bccad9fddb8651d1b2447b", candidate)
 
     def test_verifier_distinguishes_wheel_and_runtime_versions(self) -> None:
         from verify_install import validate_vllm_versions
 
-        validate_vllm_versions("0.26.0", "0.26.0+cu128")
-        validate_vllm_versions("0.26.0+cu128", "0.26.0+cu128")
+        validate_vllm_versions("0.27.1", "0.27.1")
+        validate_vllm_versions("0.27.1+local", "0.27.1")
 
         with self.assertRaisesRegex(RuntimeError, "distribution version"):
-            validate_vllm_versions("0.26.0", "0.26.0")
+            validate_vllm_versions("0.27.1", "0.27.1+cu130")
         with self.assertRaisesRegex(RuntimeError, "runtime version"):
-            validate_vllm_versions("0.25.1", "0.26.0+cu128")
+            validate_vllm_versions("0.26.0", "0.27.1")
 
     def test_installer_is_atomic_and_does_not_parse_hash_stdout(self) -> None:
         script = (ROOT / "install.bat").read_text(encoding="utf-8")
@@ -104,10 +104,10 @@ class ReleaseContractTests(unittest.TestCase):
     def test_patch_digest(self) -> None:
         from verify_artifact import sha256_file
 
-        self.assertEqual(sha256_file(ROOT / "vllm-windows-v9.patch"), PATCH_SHA256)
+        self.assertEqual(sha256_file(ROOT / "vllm-windows-v10.patch"), PATCH_SHA256)
 
     def test_patch_forces_int64_sampling_seed(self) -> None:
-        patch = (ROOT / "vllm-windows-v9.patch").read_text(encoding="utf-8")
+        patch = (ROOT / "vllm-windows-v10.patch").read_text(encoding="utf-8")
         self.assertIn(
             "+            seed = np.random.randint("
             "_NP_INT64_MIN, _NP_INT64_MAX, dtype=np.int64)",
@@ -115,13 +115,13 @@ class ReleaseContractTests(unittest.TestCase):
         )
 
     def test_patch_uses_safe_windows_kv_offload_dma(self) -> None:
-        patch = (ROOT / "vllm-windows-v9.patch").read_text(encoding="utf-8")
+        patch = (ROOT / "vllm-windows-v10.patch").read_text(encoding="utf-8")
         self.assertIn('+    if sys.platform == "win32":', patch)
         self.assertIn("+        _copy_blocks_windows", patch)
         self.assertIn("+        (err,) = cudart.cudaMemcpyAsync(", patch)
 
     def test_patch_contains_windows_tiered_kv_cache_fixes(self) -> None:
-        patch = (ROOT / "vllm-windows-v9.patch").read_text(encoding="utf-8")
+        patch = (ROOT / "vllm-windows-v10.patch").read_text(encoding="utf-8")
         markers = (
             '+    if os.name == "nt" and uses_shared_mmap:',
             "+def _wait_for_path_size(",
@@ -184,6 +184,13 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("config.json and safetensors/AWQ/GPTQ weights", launcher)
         self.assertNotIn('"model_type": "gguf"', launcher)
         self.assertNotIn("HuggingFace directory or GGUF file", launcher)
+
+    def test_fastapi_request_annotation_is_globally_resolvable(self) -> None:
+        launcher = (ROOT / "vllm_launcher.py").read_text(encoding="utf-8")
+        self.assertIn("from fastapi import FastAPI, Request", launcher)
+        self.assertNotIn("    from fastapi import FastAPI, Request", launcher)
+        self.assertIn("async def embeddings(request: Request):", launcher)
+        self.assertIn("async def chat_completions(request: Request):", launcher)
 
     def test_quickstarts_use_fast_reproducible_baseline(self) -> None:
         sections = {

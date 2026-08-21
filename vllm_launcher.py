@@ -29,6 +29,9 @@ import logging
 import uuid
 from pathlib import Path
 
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, StreamingResponse
+
 from engine_dispatcher import EngineDispatcher, EngineDispatchFailure
 
 # Keep CUDA device numbering consistent with nvidia-smi on Windows.  This is
@@ -217,8 +220,6 @@ def format_tool_calls_response(tool_calls: list) -> list:
 
 def create_app(llm: LLM, model_name: str, task: str = "generate"):
     """Create FastAPI app with OpenAI-compatible endpoints."""
-    from fastapi import FastAPI, Request
-    from fastapi.responses import StreamingResponse, JSONResponse
     from vllm import SamplingParams
     app = FastAPI()
     engine = llm.llm_engine

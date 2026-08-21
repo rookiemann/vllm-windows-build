@@ -1,16 +1,16 @@
-# Install vLLM v0.26.0 on Windows
+# Install vLLM v0.27.1 on Windows
 
-> v0.26.0 is the current release with native SM 7.5/8.6/8.9/12.0
-> kernels. Its release page is public with both wheels attached. You can
-> also use the locally built copy in `E:\vllm-windows-build-v2\dist-v0.26.0`.
+> v0.27.1 is the current CUDA 13.0 release with native SM
+> 7.5/8.6/8.9/12.0 kernels. The locally built wheel is in
+> `E:\vllm-windows-build-v2\dist-v0.27.1`.
 
 Two paths:
 
 - **Install the pre-built wheel**: no compiler needed; recommended for most users.
-- **Build from source**: requires Visual Studio 2022, CUDA 12.8, Python 3.13, and patience.
+- **Build from source**: requires Visual Studio 2022, CUDA 13.0, Python 3.13, and patience.
 
 `install.bat` handles the wheel path end to end. The current source build is
-driven by `build_cu128_py313_v0.26.0.bat` in `E:\vllm-windows-build-v2`.
+driven by `build_cu130_py313_v0.27.1.bat` in `E:\vllm-windows-build-v2`.
 
 ## Install The Wheel
 
@@ -20,10 +20,10 @@ driven by `build_cu128_py313_v0.26.0.bat` in `E:\vllm-windows-build-v2`.
 |---|---|---|
 | Windows | 10 / 11 x64 | Tested on Windows 10 Pro 22H2 |
 | GPU | NVIDIA SM 7.5+ | RTX 20/30/40/50, A100, H100 |
-| Driver | R570+ | Required for RTX 50-series / Blackwell |
+| Driver | R580+ | Required by CUDA 13.0 |
 | Python | 3.13.x | `install.bat` uses embedded Python 3.13.14 plus headers/libs for Triton |
-| PyTorch | 2.11.0+cu128 | CUDA 12.8 runtime from PyTorch wheels |
-| Triton | triton-windows 3.6.0.post26 | Installed by `install.bat` |
+| PyTorch | 2.13.0+cu130 | CUDA 13.0 runtime from PyTorch wheels |
+| Triton | triton-windows 3.7.1.post27 | Installed by `install.bat` |
 | Disk | 5 GB+ | Python, PyTorch, Triton, and wheel |
 
 You do not need CUDA Toolkit or Visual Studio to install the pre-built wheel.
@@ -35,7 +35,7 @@ install.bat
 ```
 
 The installer downloads embedded Python, adds the Python headers/libs
-needed by Triton's runtime compiler, installs PyTorch cu128,
+needed by Triton's runtime compiler, installs PyTorch cu130,
 triton-windows, the vLLM wheel, structured-output backends, and verifies
 both `import vllm` and Triton's CUDA runtime driver path.
 
@@ -71,19 +71,19 @@ If `python\` is from an older major/minor Python version, delete
 py -3.13 -m venv venv
 venv\Scripts\activate
 
-pip install torch==2.11.0 torchaudio==2.11.0 torchvision==0.26.0 ^
-    --index-url https://download.pytorch.org/whl/cu128
+pip install torch==2.13.0 torchaudio==2.11.0 torchvision==0.28.0 ^
+    --index-url https://download.pytorch.org/whl/cu130
 
-pip install triton-windows==3.6.0.post26
+pip install triton-windows==3.7.1.post27
 pip install "llguidance>=1.7.0,<1.8.0" "xgrammar>=0.2.0,<1.0.0"
 pip install multi_turboquant-0.1.0-py3-none-any.whl
-pip install dist-v0.26.0\vllm-0.26.0+cu128-cp313-cp313-win_amd64.whl
+pip install dist-v0.27.1\vllm-0.27.1-cp313-cp313-win_amd64.whl
 ```
 
 Or download the wheel from the latest GitHub release:
 
 ```text
-https://github.com/aivrar/vllm-windows-build/releases/tag/v0.26.0-win-cu128
+https://github.com/aivrar/vllm-windows-build/releases/tag/v0.27.1-win-cu130
 ```
 
 ### Verify
@@ -97,12 +97,12 @@ vllm serve --help
 Expected runtime and distribution versions:
 
 ```text
-0.26.0
-0.26.0+cu128
+0.27.1
+0.27.1
 ```
 
-The module reports upstream's base version; the distribution metadata carries
-this project's `+cu128` wheel tag. `verify_install.py` checks both.
+The runtime and distribution metadata both report 0.27.1. `verify_install.py`
+also checks the Torch CUDA and Triton versions.
 
 ## Build From Source
 
@@ -111,12 +111,12 @@ this project's `+cu128` wheel tag. `verify_install.py` checks both.
 | Component | Version |
 |---|---|
 | Visual Studio | VS 2022 with C++ workload |
-| CUDA Toolkit | 12.8 |
+| CUDA Toolkit | 13.0 Update 2 |
 | Python | 3.13.x |
-| PyTorch | 2.11.0+cu128 |
+| PyTorch | 2.13.0+cu130 |
 | Ninja | Available in the venv or on PATH |
 | Rust | Current stable MSVC toolchain |
-| protoc | Required for the v0.26.0 Rust frontend/tool parser |
+| protoc | Required for the v0.27.1 Rust frontend/tool parser |
 | RAM | 32 GB minimum, 64 GB recommended |
 | Disk | 30 GB+ |
 
@@ -124,11 +124,13 @@ this project's `+cu128` wheel tag. `verify_install.py` checks both.
 
 ```bat
 cd /d E:\vllm-windows-build-v2
-git -C vllm-source-v0.26.0 describe --tags --always
+git -C vllm-source-v0.27.1 describe --tags --always
 ```
 
 The v2 tree contains the native Windows changes and compiled artifacts used by
-the release. Do not apply the historical `vllm-windows-v9.patch` to it.
+the release, so do not apply another patch on top of it. To start from a clean
+upstream v0.27.1 checkout instead, apply the current
+`vllm-windows-v10.patch` as documented in [build.md](build.md).
 
 ### Build
 
@@ -136,7 +138,7 @@ Run the v2 build script from a Visual Studio developer command prompt:
 
 ```bat
 cd /d E:\vllm-windows-build-v2
-build_cu128_py313_v0.26.0.bat
+build_cu130_py313_v0.27.1.bat
 ```
 
 Important defaults:
@@ -145,7 +147,7 @@ Important defaults:
 set TORCH_CUDA_ARCH_LIST=7.5;8.6;8.9;12.0
 set MAX_JOBS=8
 set VLLM_DISABLE_SCCACHE=1
-set SETUPTOOLS_SCM_PRETEND_VERSION=0.26.0
+set SETUPTOOLS_SCM_PRETEND_VERSION=0.27.1
 ```
 
 The checked-in v2 script uses the available worker budget (`MAX_JOBS=8` on the
@@ -157,15 +159,17 @@ reduce it to 2 before rebuilding.
 After the editable install succeeds and `vllm.egg-info` exists:
 
 ```bat
-cd /d E:\vllm-windows-build-v2\vllm-source-v0.26.0
+cd /d E:\vllm-windows-build-v2\vllm-source-v0.27.1
 set VLLM_USE_LOCAL_PRECOMPILED=1
-python -m pip wheel . --no-build-isolation --no-deps --wheel-dir E:\vllm-windows-build-v2\dist-v0.26.0
+set VLLM_SKIP_PRECOMPILED_VERSION_SUFFIX=1
+set VLLM_VERSION_OVERRIDE=0.27.1
+uv build --wheel --no-build-isolation --out-dir E:\vllm-windows-build-v2\dist-v0.27.1
 ```
 
 Output:
 
 ```text
-E:\vllm-windows-build-v2\dist-v0.26.0\vllm-0.26.0+cu128-cp313-cp313-win_amd64.whl
+E:\vllm-windows-build-v2\dist-v0.27.1\vllm-0.27.1-cp313-cp313-win_amd64.whl
 ```
 
 ## Runtime Environment

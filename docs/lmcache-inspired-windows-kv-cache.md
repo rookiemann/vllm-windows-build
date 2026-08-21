@@ -1,29 +1,29 @@
 # LMCache-Inspired KV Cache Expansion for Native Windows
 
 Status: CPU LRU/ARC and RAM + filesystem LRU/ARC remain implemented and
-validated in the v0.26.0 release wheel; the feature remains experimental and
+validated in the v0.27.1 release wheel; the feature remains experimental and
 opt-in.
 
-Last reviewed: 2026-07-31
+Last reviewed: 2026-08-21
 
-Target baseline: vLLM 0.26.0, CPython 3.13, PyTorch 2.11.0+cu128,
-CUDA 12.8, native Windows
+Target baseline: vLLM 0.27.1, CPython 3.13, PyTorch 2.13.0+cu130,
+CUDA 13.0, native Windows
 
-## v0.26.0 Release Update
+## v0.27.1 Release Update
 
-The implementation was rebuilt on upstream vLLM 0.26.0 in
+The implementation was rebuilt on upstream vLLM 0.27.1 in
 `E:\vllm-windows-build-v2`. The release wheel retains the Windows DMA,
 shared-mmap, filesystem namespace, and non-Triton block-table fixes described
-below and adds the v0.26 launcher controls used for SM 7.5/Turing systems.
-The wheel is `vllm-0.26.0+cu128-cp313-cp313-win_amd64.whl` (389,473,142 bytes;
-SHA-256 `a9fd2e5752d885a03c28aaa25472b9cdbe8685b4d3ed1a7ce3999803f0179658`).
+below. The wheel is `vllm-0.27.1-cp313-cp313-win_amd64.whl` (239,025,534
+bytes; SHA-256
+`7c13ed44e94694478bdd4f5fcca23e2d66ba1e8fa9bccad9fddb8651d1b2447b`).
 
-The release passed native-import checks, a direct Qwen3-14B HTTP smoke test
-on the RTX 3090, the integrated launcher on the RTX 3060, and the repository
-regression suite (23 tests, 19 subtests). These are compatibility and
-correctness checks, not a claim that LMCache itself runs natively on Windows
-or that every model/configuration is supported. The exact Qwen3.5-9B GPTQ
-checkpoint still exposes a Transformers/vLLM config-name mismatch.
+The installed wheel served Qwen3.5 9B GPTQ on the RTX 3090 and passed CPU LRU,
+forced filesystem eviction/restore, and fresh-process persistent reuse. Each
+offload restore reused 1,056 of 1,452 prompt tokens and reproduced exact token
+IDs. The focused source regression suite passed 80 tests with one expected
+platform-gated skip. These results validate this project's local tiers; they
+do not claim that LMCache itself runs natively on Windows.
 
 ## Executive Summary
 
@@ -39,7 +39,7 @@ wheels, and uses Linux facilities such as POSIX shared memory, `/dev/shm`,
 `mmap` behavior, `shm_open`, `fcntl`, NUMA operations, and Linux-oriented
 high-performance storage and networking libraries. Python 3.13 is **not** the
 problem: LMCache supports it, and its current PyTorch baseline aligns with this
-project's PyTorch 2.11.0.
+project's PyTorch 2.13.0.
 
 The recommended direction is not a wholesale LMCache port. It is to:
 
@@ -184,16 +184,20 @@ transferring the cached blocks costs.
 
 ## Current LMCache Compatibility Assessment
 
-The assessment was made against LMCache v0.5.1, released 2026-07-06.
+The assessment was refreshed against
+[LMCache v0.5.4](https://github.com/LMCache/LMCache/releases/tag/v0.5.4),
+released 2026-08-20. Its tagged
+[`pyproject.toml`](https://github.com/LMCache/LMCache/blob/v0.5.4/pyproject.toml)
+is the source for the Python, Torch, and CUDA rows below.
 
-| Area | LMCache v0.5.1 | This project | Result |
+| Area | LMCache v0.5.4 | This project | Result |
 |---|---|---|---|
 | Operating system | Linux | Native Windows | Primary incompatibility |
 | Python | 3.10-3.13 | 3.13.14 | Compatible |
-| PyTorch baseline | 2.11.0 in current build configuration | 2.11.0+cu128 | Closely aligned |
+| PyTorch baseline | 2.13.0 | 2.13.0+cu130 | Aligned |
 | Published wheels | manylinux | win_amd64 required | No compatible wheel |
-| Published CUDA packages | primarily CUDA 12.9/13.0 paths | CUDA 12.8 | No matching prebuilt artifact |
-| vLLM connector API | Supported | Present in local vLLM 0.24 source | Architecturally compatible |
+| Published CUDA packages | CUDA 13.0 primary, CUDA 12.9 secondary | CUDA 13.0 | CUDA aligned; OS wheel is not |
+| vLLM connector API | Supported | Present in local vLLM 0.27.1 source | Architecturally compatible |
 | Recommended MP transport | POSIX SHM/CUDA IPC | Native Windows | Requires redesign |
 | NIXL/GDS/RDMA paths | Linux/datacenter oriented | Local Windows workstation | Defer or omit |
 

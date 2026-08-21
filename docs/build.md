@@ -1,40 +1,51 @@
 # Build From Source
 
-The current release build is vLLM 0.26.0. The native compile and wheel
+The current release build is vLLM 0.27.1. The native compile and wheel
 assembly live in `E:\vllm-windows-build-v2`; this repository contains the
-installer, launcher, validation contract, and release documentation. The
-older v0.25.1 patch workflow is retained below as historical reference.
+exact `vllm-windows-v10.patch`, installer, launcher, validation contract, and
+release documentation. The older v0.25.1 patch workflow is retained below as
+historical reference.
 
-## Current v0.26.0 build (v2 workspace)
+## Current v0.27.1 build (v2 workspace)
 
-The v2 tree is based on upstream v0.26.0 and compiles CUDA targets
-`7.5;8.6;8.9;12.0` with Python 3.13, PyTorch 2.11.0+cu128, and CUDA 12.8.
+The v2 tree is based on upstream v0.27.1 and compiles CUDA targets
+`7.5;8.6;8.9;12.0` with Python 3.13, PyTorch 2.13.0+cu130, and CUDA 13.0.
 Run the checked-in build script from a developer command prompt:
 
 ```bat
 cd /d E:\vllm-windows-build-v2
-build_cu128_py313_v0.26.0.bat
+build_cu130_py313_v0.27.1.bat
 ```
 
 After the native editable build completes, assemble the wheel from the same
 tree without downloading a Linux precompiled package:
 
 ```bat
-cd /d E:\vllm-windows-build-v2\vllm-source-v0.26.0
+cd /d E:\vllm-windows-build-v2\vllm-source-v0.27.1
 set VLLM_USE_LOCAL_PRECOMPILED=1
-python -m pip wheel . --no-build-isolation --no-deps --wheel-dir E:\vllm-windows-build-v2\dist-v0.26.0
+set VLLM_SKIP_PRECOMPILED_VERSION_SUFFIX=1
+set VLLM_VERSION_OVERRIDE=0.27.1
+uv build --wheel --no-build-isolation --out-dir E:\vllm-windows-build-v2\dist-v0.27.1
 ```
 
 Expected output:
 
 ```text
-E:\vllm-windows-build-v2\dist-v0.26.0\vllm-0.26.0+cu128-cp313-cp313-win_amd64.whl
-SHA-256: a9fd2e5752d885a03c28aaa25472b9cdbe8685b4d3ed1a7ce3999803f0179658
+E:\vllm-windows-build-v2\dist-v0.27.1\vllm-0.27.1-cp313-cp313-win_amd64.whl
+SHA-256: 7c13ed44e94694478bdd4f5fcca23e2d66ba1e8fa9bccad9fddb8651d1b2447b
 ```
 
 Run `python tests\test_wheel_contents.py` against that file before release.
 The complete source snapshot, native changes, exact build log, and GPU
-validation are recorded in [v0.26.0-build-candidate.md](v0.26.0-build-candidate.md).
+validation are recorded in [v0.27.1-build-candidate.md](v0.27.1-build-candidate.md).
+
+The public source delta can be applied to a clean upstream tree with:
+
+```bat
+git checkout v0.27.1
+git apply --check ..\vllm-windows-v10.patch
+git apply ..\vllm-windows-v10.patch
+```
 
 For install-only usage, see [install.md](install.md).
 

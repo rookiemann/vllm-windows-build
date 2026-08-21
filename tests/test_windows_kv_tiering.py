@@ -1,4 +1,4 @@
-"""Real-model validation for the vLLM 0.26.0 Windows KV offloading release.
+"""Real-model validation for the vLLM 0.27.1 Windows KV offloading release.
 
 Run one mode per process so CUDA, model, and cache state cannot leak between
 comparisons. The caller should expose only the intended GPU.
@@ -14,7 +14,7 @@ import os
 import time
 from pathlib import Path
 
-RESULT_MARKER = "===VLLM_V0251_KV_RESULT==="
+RESULT_MARKER = "===VLLM_WINDOWS_KV_RESULT==="
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,7 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--result-json")
     parser.add_argument("--reference-json")
     parser.add_argument("--reuse-existing-cache", action="store_true")
-    parser.add_argument("--expected-version", default="0.26.0+cu128")
+    parser.add_argument("--expected-version", default="0.27.1")
     parser.add_argument("--cpu-cache-mib", type=int, default=512)
     parser.add_argument("--gpu-cache-mib", type=int, default=1536)
     parser.add_argument("--max-model-len", type=int, default=2048)
@@ -247,8 +247,11 @@ def main() -> None:
             )
 
         engine_cache_config = llm.llm_engine.vllm_config.cache_config
+        # vLLM 0.27 removed CacheConfig.hash_block_size. Older releases expose
+        # it separately, while 0.27 uses block_size for the same fallback here.
         cache_block_tokens = int(
-            engine_cache_config.hash_block_size or engine_cache_config.block_size
+            getattr(engine_cache_config, "hash_block_size", None)
+            or engine_cache_config.block_size
         )
 
         sampling_params = SamplingParams(

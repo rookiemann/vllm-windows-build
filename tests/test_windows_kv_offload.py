@@ -91,7 +91,7 @@ def main() -> None:
         if os.name == "nt" and not hasattr(cuda_mem_ops, "_copy_blocks_windows"):
             raise SystemExit(
                 "The installed wheel lacks the safe Windows KV-offload DMA "
-                "fallback; install the current v0.26.0 Windows wheel."
+                "fallback; install the current v0.27.1 Windows wheel."
             )
         try:
             cuda_python_version = importlib.metadata.version("cuda-python")

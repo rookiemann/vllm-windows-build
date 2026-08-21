@@ -3,7 +3,7 @@
 Before publishing a rebuilt wheel, validate its complete ZIP payload and RECORD:
 
 ```powershell
-python tests/test_wheel_contents.py E:/vllm-windows-build-v2/dist-v0.26.0/vllm-0.26.0+cu128-cp313-cp313-win_amd64.whl
+python tests/test_wheel_contents.py E:/vllm-windows-build-v2/dist-v0.27.1/vllm-0.27.1-cp313-cp313-win_amd64.whl
 ```
 
 This check includes the generated FlashAttention rotary and CuteDSL modules,
@@ -43,7 +43,7 @@ isolated `pip --target` installation with:
 python tests/test_issue7_flash_attn.py --package-root $env:TEMP\vllm-issue7-wheeltest
 ```
 
-End-to-end test scripts for the Windows vLLM 0.26.0 release with
+End-to-end test scripts for the Windows vLLM 0.27.1 release with
 Multi-TurboQuant and experimental native KV offload.
 
 ## Setup
@@ -81,10 +81,10 @@ set CUDA_VISIBLE_DEVICES=0
 `nvidia-smi` numbering on mixed-GPU machines. Confirm the `Visible GPU` line
 before relying on a result.
 
-## test_windows_kv_tiering.py - v0.26.0 release matrix
+## test_windows_kv_tiering.py - v0.27.1 release matrix
 
 This is the main real-model harness for `OffloadingConnector`. It requires the
-installed `0.26.0+cu128` wheel, exactly one visible RTX 3090, and a local
+installed `0.27.1` wheel, exactly one visible RTX 3090, and a local
 Hugging Face model. Run each mode in a fresh process.
 
 ```bat

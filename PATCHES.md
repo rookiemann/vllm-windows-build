@@ -1,39 +1,60 @@
 # Patch Reference
 
-Reference for `vllm-windows-v9.patch` (active), including the v0.25.1-specific
-changes and the Windows work carried forward from older patchsets. Older
-patches remain in the repo for legacy installs.
+Reference for `vllm-windows-v10.patch` (active), the exact committed Windows
+delta against upstream vLLM 0.27.1. Older patches remain in the repository for
+legacy releases.
 
-For build internals (phases, iterating on the patch, regenerating it),
-see [docs/build.md](docs/build.md).
+For build internals, see [docs/build.md](docs/build.md).
 
 ## Build environment
 
 | | |
 |---|---|
-| Base | vLLM v0.25.1 (tag `v0.25.1`, commit `752a3a504485790a2e8491cacbb35c137339ad34`) |
+| Base | vLLM v0.27.1 (tag `v0.27.1`) |
 | Compiler | MSVC 19.43.34810 (Visual Studio 2022 Community 17.13) |
-| CUDA | 12.8 (first toolkit with Blackwell sm_120; was 12.6) |
-| Python | Built with 3.13.11 (`cp313`); portable installer targets 3.13.14 |
-| PyTorch | 2.11.0+cu128 (was +cu126) |
-| Triton | triton-windows 3.6.0.post26 |
-| Arch list | `8.6;8.9;12.0` (sm_86 / sm_89 / sm_120) |
+| CUDA | 13.0 Update 2 (`nvcc` 13.0.88) |
+| Python | 3.13.11 (`cp313`) |
+| PyTorch | 2.13.0+cu130 |
+| Triton | triton-windows 3.7.1.post27 |
+| Arch list | `7.5;8.6;8.9;12.0` (Turing through Blackwell) |
 | CUTLASS | FetchContent + Windows patch applied automatically |
 | vllm-flash-attn | FetchContent + vendored CUTLASS submodule patched |
-| Generator | Ninja (`MAX_JOBS=2`, no sccache — see build notes) |
-| GPU | built for sm_86/89/120; tested on RTX 3090 (sm_86) |
+| Generator | Ninja (`MAX_JOBS=8`) |
+| GPU | Built for SM 7.5/8.6/8.9/12.0; tested on RTX 3090 (SM 8.6) |
 
 ## Diff stats
 
+```text
+v10 patch size: 167,335 bytes unified diff against upstream v0.27.1.
+SHA-256: 4B6C9CD543414EF3ED1EB7FCBD7F39CE6BE10BDC97D901261977EE905346C988
+72 files changed, 1,900 insertions, 287 deletions.
 ```
-v9 patch size: 153,236 bytes unified diff against upstream v0.25.1.
-SHA-256: 4893BDB35F905237BD0D0D042E365EAFC5B6B4C49809747BE49B42E6D8BF7609
-72 files changed, 1,715 insertions, 260 deletions.
-+ 4 new files: vllm/v1/attention/ops/multi_turboquant_kv.py (295 lines),
-  tests/v1/worker/test_block_table_fallback.py (103 lines),
-  cutlass-windows.patch (69 lines),
-  vllm-flash-attn-cutlass-windows.patch (69 lines)
+
+Apply it to a clean upstream checkout with:
+
+```bat
+git checkout v0.27.1
+git apply --check ..\vllm-windows-v10.patch
+git apply ..\vllm-windows-v10.patch
 ```
+
+## v0.27.1 additions
+
+- Ported the Windows build/runtime surface to the stable-libtorch module
+  layout and CUDA 13 toolchain used by vLLM 0.27.1.
+- Added Windows packaging for the optimized Rust frontend and Rust tool
+  parser, plus generated FlashAttention Python payloads.
+- Added MSVC fixes for new attention math/types and omitted only the SM120
+  CUTLASS specializations whose aligned by-value ABI is unsupported on
+  Windows x64.
+- Carried forward the Windows-safe CPU/filesystem KV tiers and added the
+  hybrid KV block-table fallback required by the 0.27 runtime.
+- Added regression coverage for filesystem mapping/tiering, shared mmap, and
+  hybrid block tables. The focused suite passed 80 tests with one expected
+  platform skip.
+
+The v0.25.1 details below describe the earlier v9 patch and remain as release
+history.
 
 ## v0.25.1 additions
 
@@ -383,14 +404,15 @@ keep landing on the TritonAttention path with our hooks.
 
 ---
 
-## Stale patches in the repo
+## Patch history
 
 Older patches against earlier vLLM versions are kept for legacy
 installs:
 
 | Patch file | Base vLLM | Status |
 |---|---|---|
-| `vllm-windows-v9.patch` | v0.25.1 | **current** |
+| `vllm-windows-v10.patch` | v0.27.1 | **current** |
+| `vllm-windows-v9.patch` | v0.25.1 | stale; final v0.25.1 patch |
 | `vllm-windows-v8.patch` | v0.24.0 | stale; final v0.24.0 patch including the sampling/KV-copy hotfixes |
 | `vllm-windows-v7.patch` | v0.24.0 | stale; original wheel omitted generated FlashAttention Python files |
 | `vllm-windows-v6.patch` | v0.23.0 | stale; still works for v0.23.0 builds |

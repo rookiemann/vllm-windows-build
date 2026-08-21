@@ -8,13 +8,18 @@ import importlib.metadata
 import sys
 from pathlib import Path
 
-EXPECTED_VLLM_VERSION = "0.26.0+cu128"
+EXPECTED_VLLM_VERSION = "0.27.1"
 
 REQUIRED_MODULES = (
     "llguidance",
     "multi_turboquant",
     "xgrammar",
+    "vllm._C_stable_libtorch",
+    "vllm._moe_C_stable_libtorch",
+    "vllm._rust_tool_parser",
+    "vllm.cumem_allocator",
     "vllm.fs_io_C",
+    "vllm.spinloop",
     "vllm.model_executor.models.qwen3_5",
     "vllm.model_executor.models.qwen3_vl",
     "vllm.v1.kv_offload.cpu.gpu_worker",
@@ -23,6 +28,7 @@ REQUIRED_MODULES = (
     "vllm.v1.kv_offload.tiering.fs.io",
     "vllm.vllm_flash_attn.layers.rotary",
     "vllm.vllm_flash_attn.ops.triton.rotary",
+    "vllm.vllm_flash_attn._vllm_fa2_C",
 )
 
 
@@ -61,10 +67,13 @@ def main() -> int:
 
     installed_vllm_version = importlib.metadata.version("vllm")
     validate_vllm_versions(vllm.__version__, installed_vllm_version)
-    if not torch.__version__.startswith("2.11.0"):
-        raise RuntimeError(f"PyTorch version is {torch.__version__!r}, expected 2.11.0")
-    if not triton.__version__.startswith("3.6.0"):
-        raise RuntimeError(f"Triton version is {triton.__version__!r}, expected 3.6.0")
+    if not torch.__version__.startswith("2.13.0") or torch.version.cuda != "13.0":
+        raise RuntimeError(
+            f"PyTorch is {torch.__version__!r} with CUDA {torch.version.cuda!r}, "
+            "expected 2.13.0+cu130"
+        )
+    if not triton.__version__.startswith("3.7.1"):
+        raise RuntimeError(f"Triton version is {triton.__version__!r}, expected 3.7.1")
     if multi_turboquant.__version__ != "0.1.0":
         raise RuntimeError(
             f"Multi-TurboQuant version is {multi_turboquant.__version__!r}, expected '0.1.0'"
